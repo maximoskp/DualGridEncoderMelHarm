@@ -3,7 +3,7 @@ from GridMLM_tokenizers import CSGridMLMTokenizer
 import os
 import numpy as np
 from torch.utils.data import DataLoader
-from models import GridMLMMelHarm
+from models import DualGridMLMMelHarm
 import torch
 from torch.optim import AdamW
 from torch.nn import CrossEntropyLoss
@@ -138,15 +138,16 @@ def main():
     loss_fn = torch.nn.CrossEntropyLoss(
         weight=class_weights.to(device), ignore_index=-100
     )
-    model = GridMLMMelHarm(
-        d_model=512, 
-        nhead=8, 
-        num_layers=8, 
+    model = DualGridMLMMelHarm(
         chord_vocab_size=len(tokenizer.vocab),
+        d_model=512,
+        nhead=8,
+        num_layers_mel=8,
+        num_layers_harm=8,
         device=device,
-        grid_length=80,
+        melody_length=80,
+        harmony_length=80,
         max_stages=total_stages,
-        conditioning_dim=8 + (curriculum_type == 'step'),
         pianoroll_dim=tokenizer.pianoroll_dim,
     )
     model.to(device)

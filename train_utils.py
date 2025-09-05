@@ -390,7 +390,6 @@ def validation_loop(model, valloader, mask_token_id, bar_token_id, condition, to
 
                 # Forward pass
                 logits = model(
-                    conditioning_vec,
                     melody_grid,
                     harmony_input,
                     stage_indices
@@ -538,7 +537,6 @@ def train_with_curriculum(
                 
                 # Forward pass
                 logits = model(
-                    conditioning_vec.to(device),
                     melody_grid.to(device),
                     harmony_input.to(device),
                     stage_indices

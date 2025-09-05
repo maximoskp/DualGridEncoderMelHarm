@@ -3,7 +3,7 @@ from GridMLM_tokenizers import CSGridMLMTokenizer
 import os
 import numpy as np
 from torch.utils.data import DataLoader
-from models import GridMLMMelHarm
+from models import DualGridMLMMelHarm
 import torch
 from torch.optim import AdamW
 from torch.nn import CrossEntropyLoss
@@ -12,7 +12,7 @@ from train_utils import train_with_curriculum
 
 curriculum_types = ['random', 'base2']
 
-def train_qt_bar_gmlm(
+def train_demh(
         train_dataset,
         trainloader,
         valloader,
@@ -148,31 +148,32 @@ def train_qt_bar_gmlm(
         weight=class_weights.to(device), ignore_index=-100
     )
 
-    model = GridMLMMelHarm(
-        d_model=512, 
-        nhead=8, 
-        num_layers=8, 
+    model = DualGridMLMMelHarm(
         chord_vocab_size=len(tokenizer.vocab),
+        d_model=512,
+        nhead=8,
+        num_layers_mel=8,
+        num_layers_harm=8,
         device=device,
-        grid_length=80,
+        melody_length=80,
+        harmony_length=80,
         max_stages=total_stages,
-        conditioning_dim=8 + (curriculum_type == 'step'),
         pianoroll_dim=tokenizer.pianoroll_dim,
     )
     model.to(device)
     optimizer = AdamW(model.parameters(), lr=lr)
 
     # save results
-    os.makedirs('results/bar_qt/', exist_ok=True)
-    os.makedirs('results/bar_qt/' + subfolder + '/', exist_ok=True)
+    os.makedirs('results/DE/', exist_ok=True)
+    os.makedirs('results/DE/' + subfolder + '/', exist_ok=True)
     if curriculum_type == 'random':
-        results_path = 'results/bar_qt/' + subfolder + '/' + curriculum_type + str(total_stages) + '.csv'
+        results_path = 'results/DE/' + subfolder + '/' + curriculum_type + str(total_stages) + '.csv'
     else:
-        results_path = 'results/bar_qt/' + subfolder + '/' + curriculum_type + '.csv'
+        results_path = 'results/DE/' + subfolder + '/' + curriculum_type + '.csv'
 
-    os.makedirs('saved_models/bar_qt/', exist_ok=True)
-    os.makedirs('saved_models/bar_qt/' + subfolder + '/', exist_ok=True)
-    save_dir = 'saved_models/bar_qt/' + subfolder + '/'
+    os.makedirs('saved_models/DE/', exist_ok=True)
+    os.makedirs('saved_models/DE/' + subfolder + '/', exist_ok=True)
+    save_dir = 'saved_models/DE/' + subfolder + '/'
     if curriculum_type == 'random':
         transformer_path = save_dir + curriculum_type + str(total_stages) + '.pt'
     else:

@@ -12,7 +12,7 @@ class HarmonyEncoderLayerWithCross(nn.Module):
       - feed-forward
     Stores last attention weights for diagnostics.
     """
-    def __init__(self, d_model, nhead, dim_feedforward=2048, dropout=0.1, activation='gelu', batch_first=True):
+    def __init__(self, d_model, nhead, dim_feedforward=2048, dropout=0.3, activation='gelu', batch_first=True):
         super().__init__()
         self.self_attn = nn.MultiheadAttention(d_model, nhead, dropout=dropout, batch_first=batch_first)
         self.cross_attn = nn.MultiheadAttention(d_model, nhead, dropout=dropout, batch_first=batch_first)
@@ -32,6 +32,7 @@ class HarmonyEncoderLayerWithCross(nn.Module):
         # placeholders for attention visualization
         self.last_self_attn = None  # shape (B, nhead, Lh, Lh) if requested
         self.last_cross_attn = None # shape (B, nhead, Lh, Lm) if requested
+    # end init
 
     def forward(self, x_h, melody_kv, attn_mask=None, key_padding_mask=None, melody_key_padding_mask=None):
         """
@@ -69,6 +70,8 @@ class HarmonyEncoderLayerWithCross(nn.Module):
         x_h = self.norm3(x_h)
 
         return x_h
+    # end forward
+# end class HarmonyEncoderLayerWithCross
 
 # ========== Stacked encoder modules ==========
 class SimpleTransformerStack(nn.Module):
@@ -76,18 +79,22 @@ class SimpleTransformerStack(nn.Module):
     def __init__(self, layer, num_layers):
         super().__init__()
         self.layers = nn.ModuleList([deepcopy(layer) for _ in range(num_layers)])
+    # end init
 
     def forward(self, x, src_key_padding_mask=None):
         # x: (B, L, D) assumed batch_first=True
         for layer in self.layers:
             x = layer(x, src_key_padding_mask=src_key_padding_mask)
         return x
+    # end forward
+# end class SimpleTransformerStack
 
 class HarmonyTransformerStack(nn.Module):
     """Stack of HarmonyEncoderLayerWithCross"""
     def __init__(self, layer, num_layers):
         super().__init__()
         self.layers = nn.ModuleList([deepcopy(layer) for _ in range(num_layers)])
+    # end init
 
     def forward(self, x_h, melody_kv, h_key_padding_mask=None, melody_key_padding_mask=None):
         # x_h: (B, Lh, D)
@@ -96,6 +103,8 @@ class HarmonyTransformerStack(nn.Module):
                         key_padding_mask=h_key_padding_mask,
                         melody_key_padding_mask=melody_key_padding_mask)
         return x_h
+    # end forward
+# end class HarmonyTransformerStack
 
 # ========== Dual-encoder model ==========
 class DualGridMLMMelHarm(nn.Module):
@@ -103,14 +112,14 @@ class DualGridMLMMelHarm(nn.Module):
                  chord_vocab_size,
                  d_model=512,
                  nhead=8,
-                 num_layers_mel=4,
-                 num_layers_harm=6,
+                 num_layers_mel=8,
+                 num_layers_harm=8,
                  dim_feedforward=2048,
-                 pianoroll_dim=12,      # e.g., PCP only
+                 pianoroll_dim=13,      # e.g., PCP + bars only
                  melody_length=80,
                  harmony_length=80,
                  max_stages=10,
-                 dropout=0.1,
+                 dropout=0.3,
                  device='cpu'):
         super().__init__()
         self.device = device
@@ -156,6 +165,7 @@ class DualGridMLMMelHarm(nn.Module):
         self.input_norm = nn.LayerNorm(d_model)
         self.output_norm = nn.LayerNorm(d_model)
         self.dropout = nn.Dropout(dropout)
+    # end init
 
     def forward(self, melody_grid, harmony_tokens=None, stage_indices=None,
                 melody_key_padding_mask=None, harm_key_padding_mask=None):
@@ -211,6 +221,7 @@ class DualGridMLMMelHarm(nn.Module):
         harmony_logits = self.output_head(harm_encoded)  # (B, Lh, V)
 
         return harmony_logits
+    # end forward
 
     # optionally add helpers to extract attention maps across layers:
     def get_attention_maps(self):
@@ -226,3 +237,5 @@ class DualGridMLMMelHarm(nn.Module):
             self_attns.append(layer.last_self_attn)
             cross_attns.append(layer.last_cross_attn)
         return self_attns, cross_attns
+    # end get_attention_maps
+# end class DualGridMLMMelHarm
