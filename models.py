@@ -3,6 +3,17 @@ import torch.nn as nn
 import math
 from copy import deepcopy
 
+def sinusoidal_positional_encoding(seq_len, d_model, device):
+    """Standard sinusoidal PE (Vaswani et al., 2017)."""
+    position = torch.arange(seq_len, device=device).unsqueeze(1)  # (seq_len, 1)
+    div_term = torch.exp(torch.arange(0, d_model, 2, device=device) *
+                         (-math.log(10000.0) / d_model))
+    pe = torch.zeros(seq_len, d_model, device=device)
+    pe[:, 0::2] = torch.sin(position * div_term)
+    pe[:, 1::2] = torch.cos(position * div_term)
+    return pe.unsqueeze(0)  # (1, seq_len, d_model)
+# end sinusoidal_positional_encoding
+
 # ========== Small helper: Transformer encoder layer with cross-attention ==========
 class HarmonyEncoderLayerWithCross(nn.Module):
     """
@@ -133,9 +144,12 @@ class DualGridMLMMelHarm(nn.Module):
         self.melody_proj = nn.Linear(pianoroll_dim, d_model)   # project PCP (and bar flag) -> d_model
         self.harmony_embedding = nn.Embedding(chord_vocab_size, d_model)
 
-        # Positional embeddings (separate for clarity)
-        self.mel_pos = nn.Parameter(torch.randn(1, melody_length, d_model))
-        self.harm_pos = nn.Parameter(torch.randn(1, harmony_length, d_model))
+        # # Positional embeddings (separate for clarity)
+        # self.mel_pos = nn.Parameter(torch.randn(1, melody_length, d_model))
+        # self.harm_pos = nn.Parameter(torch.randn(1, harmony_length, d_model))
+        self.shared_pos = sinusoidal_positional_encoding(
+            max(melody_length, harmony_length), d_model, device
+        )
 
         # Stage embedding (for harmony encoder)
         self.max_stages = max_stages
@@ -181,7 +195,8 @@ class DualGridMLMMelHarm(nn.Module):
 
         # ---- Melody encoding ----
         mel = self.melody_proj(melody_grid)                    # (B, Lm, d_model)
-        mel = mel + self.mel_pos[:, :self.melody_length, :].to(device)
+        # mel = mel + self.mel_pos[:, :self.melody_length, :].to(device)
+        mel = mel + self.shared_pos[:, :self.melody_length, :]
         mel = self.input_norm(mel)
         mel = self.dropout(mel)
 
@@ -194,7 +209,8 @@ class DualGridMLMMelHarm(nn.Module):
             harm = torch.zeros(B, self.harmony_length, self.d_model, device=device)
 
         # add harmony positional encodings
-        harm = harm + self.harm_pos[:, :self.harmony_length, :].to(device)
+        # harm = harm + self.harm_pos[:, :self.harmony_length, :].to(device)
+        harm = harm + self.shared_pos[:, :self.harmony_length, :]
 
         # stage conditioning (concatenate stage embedding to features before projecting back)
         if stage_indices is not None:
