@@ -144,11 +144,11 @@ def main():
         nhead=8,
         num_layers_mel=8,
         num_layers_harm=8,
-        device=device,
         melody_length=80,
         harmony_length=80,
         max_stages=total_stages,
         pianoroll_dim=tokenizer.pianoroll_dim,
+        device=device
     )
     model.to(device)
     optimizer = AdamW(model.parameters(), lr=lr)

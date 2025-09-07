@@ -116,6 +116,8 @@ def random_progressive_masking(
 
         visible_idx = perm[:num_visible]
         predict_idx = perm[:num_visible + num_predict]  # predict includes visible + next unmasked tokens
+        print('visible_idx: ', visible_idx)
+        print('predict_idx: ', predict_idx)
 
         visible_harmony[b, visible_idx] = harmony_tokens[b, visible_idx]
         denoising_target[b, predict_idx] = harmony_tokens[b, predict_idx]
@@ -450,7 +452,8 @@ def train_with_curriculum(
     validations_per_epoch=1,
     tqdm_position=0
 ):
-    device = next(model.parameters()).device
+    # device = next(model.parameters()).device
+    device = model.device
     perplexity_metric.to(device)
     best_val_loss = np.inf
     saving_version = 0

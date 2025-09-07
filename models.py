@@ -23,19 +23,28 @@ class HarmonyEncoderLayerWithCross(nn.Module):
       - feed-forward
     Stores last attention weights for diagnostics.
     """
-    def __init__(self, d_model, nhead, dim_feedforward=2048, dropout=0.3, activation='gelu', batch_first=True):
+    def __init__(
+                self, 
+                d_model, 
+                nhead, 
+                dim_feedforward=2048, 
+                dropout=0.3, 
+                activation='gelu', 
+                batch_first=True,
+                device='cpu'
+            ):
         super().__init__()
-        self.self_attn = nn.MultiheadAttention(d_model, nhead, dropout=dropout, batch_first=batch_first)
-        self.cross_attn = nn.MultiheadAttention(d_model, nhead, dropout=dropout, batch_first=batch_first)
+        self.self_attn = nn.MultiheadAttention(d_model, nhead, dropout=dropout, batch_first=batch_first, device=device)
+        self.cross_attn = nn.MultiheadAttention(d_model, nhead, dropout=dropout, batch_first=batch_first, device=device)
 
         # feedforward
-        self.linear1 = nn.Linear(d_model, dim_feedforward)
+        self.linear1 = nn.Linear(d_model, dim_feedforward, device=device)
         self.activation = nn.GELU() if activation == 'gelu' else nn.ReLU()
-        self.linear2 = nn.Linear(dim_feedforward, d_model)
+        self.linear2 = nn.Linear(dim_feedforward, d_model, device=device)
 
-        self.norm1 = nn.LayerNorm(d_model)
-        self.norm2 = nn.LayerNorm(d_model)
-        self.norm3 = nn.LayerNorm(d_model)
+        self.norm1 = nn.LayerNorm(d_model, device=device)
+        self.norm2 = nn.LayerNorm(d_model, device=device)
+        self.norm3 = nn.LayerNorm(d_model, device=device)
         self.dropout1 = nn.Dropout(dropout)
         self.dropout2 = nn.Dropout(dropout)
         self.dropout3 = nn.Dropout(dropout)
@@ -134,15 +143,14 @@ class DualGridMLMMelHarm(nn.Module):
                  device='cpu'):
         super().__init__()
         self.device = device
-        self.to(device)
 
         self.d_model = d_model
         self.melody_length = melody_length
         self.harmony_length = harmony_length
 
         # Projections
-        self.melody_proj = nn.Linear(pianoroll_dim, d_model)   # project PCP (and bar flag) -> d_model
-        self.harmony_embedding = nn.Embedding(chord_vocab_size, d_model)
+        self.melody_proj = nn.Linear(pianoroll_dim, d_model, device=device)   # project PCP (and bar flag) -> d_model
+        self.harmony_embedding = nn.Embedding(chord_vocab_size, d_model, device=device)
 
         # # Positional embeddings (separate for clarity)
         # self.mel_pos = nn.Parameter(torch.randn(1, melody_length, d_model))
@@ -154,8 +162,8 @@ class DualGridMLMMelHarm(nn.Module):
         # Stage embedding (for harmony encoder)
         self.max_stages = max_stages
         self.stage_embedding_dim = 64
-        self.stage_embedding = nn.Embedding(self.max_stages, self.stage_embedding_dim)
-        self.stage_proj = nn.Linear(d_model + self.stage_embedding_dim, d_model)
+        self.stage_embedding = nn.Embedding(self.max_stages, self.stage_embedding_dim, device=device)
+        self.stage_proj = nn.Linear(d_model + self.stage_embedding_dim, d_model, device=device)
 
         # Melody encoder: use standard transformer encoder layers
         encoder_layer_mel = nn.TransformerEncoderLayer(d_model=d_model,
@@ -163,22 +171,26 @@ class DualGridMLMMelHarm(nn.Module):
                                                        dim_feedforward=dim_feedforward,
                                                        dropout=dropout,
                                                        activation='gelu',
-                                                       batch_first=True)
+                                                       batch_first=True,
+                                                       device=device)
         self.melody_encoder = SimpleTransformerStack(encoder_layer_mel, num_layers_mel)
 
         # Harmony encoder: layers with cross-attention into melody encoded output
         harm_layer = HarmonyEncoderLayerWithCross(d_model=d_model, nhead=nhead,
                                                   dim_feedforward=dim_feedforward,
-                                                  dropout=dropout, activation='gelu', batch_first=True)
+                                                  dropout=dropout, activation='gelu', 
+                                                  batch_first=True, device=device)
         self.harmony_encoder = HarmonyTransformerStack(harm_layer, num_layers_harm)
 
         # Output head for chords
-        self.output_head = nn.Linear(d_model, chord_vocab_size)
+        self.output_head = nn.Linear(d_model, chord_vocab_size, device=device)
 
         # Norms / dropout
-        self.input_norm = nn.LayerNorm(d_model)
-        self.output_norm = nn.LayerNorm(d_model)
+        self.input_norm = nn.LayerNorm(d_model, device=device)
+        self.output_norm = nn.LayerNorm(d_model, device=device)
         self.dropout = nn.Dropout(dropout)
+
+        self.to(device)
     # end init
 
     def forward(self, melody_grid, harmony_tokens=None, stage_indices=None,
