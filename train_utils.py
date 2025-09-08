@@ -134,7 +134,7 @@ def random_progressive_masking(
 def full_to_partial_masking(
         harmony_tokens,
         mask_token_id,
-        percent_visible=0.0,
+        num_visible=0,
         bar_token_id=None
     ):
     """
@@ -166,7 +166,6 @@ def full_to_partial_masking(
         # denoising_target[bar_mask] = bar_token_id
     
     perm = torch.randperm(L, device=device)
-    num_visible = min( int(L * percent_visible), L-1 )  # ensure at least one token is predicted
 
     visible_idx = perm[:num_visible]
     predict_idx = perm[num_visible:]  # predict all remaining
@@ -396,9 +395,9 @@ def apply_focal_sharpness(
     return attenuated_grid
 # end apply_focal_sharpness
 
-def validation_loop(model, valloader, mask_token_id, bar_token_id, condition, percent_visible, \
+def validation_loop(model, valloader, mask_token_id, bar_token_id, num_visible, \
                     loss_fn, epoch, step, \
-                    curriculum_type, train_loss, train_accuracy, \
+                    train_loss, train_accuracy, \
                     train_perplexity, train_token_entropy,
                     best_val_loss, saving_version, results_path=None, transformer_path=None, tqdm_position=0):
     device = model.device
@@ -420,25 +419,20 @@ def validation_loop(model, valloader, mask_token_id, bar_token_id, condition, pe
                 perplexity_metric.reset()
                 melody_grid = batch["pianoroll"].to(device)           # (B, 256, 140)
                 harmony_gt = batch["input_ids"].to(device)         # (B, 256)
-                conditioning_vec = batch[condition].to(device)  # (B, C0)
                 
                 # Apply masking to harmony
                 rets = full_to_partial_masking(
                     harmony_gt,
                     mask_token_id,
-                    percent_visible,
+                    num_visible,
                     bar_token_id=bar_token_id
                 )
-
                 harmony_input, harmony_target = rets[0], rets[1]
 
                 # Forward pass
                 logits = model(
                     melody_grid,
-                    # harmony_gt,  # DEBUG
-                    harmony_input,
-                    # stage_indices,
-                    None
+                    harmony_input
                 )
 
                 # Compute loss only on masked tokens
@@ -477,7 +471,7 @@ def validation_loop(model, valloader, mask_token_id, bar_token_id, condition, pe
     if results_path is not None:
         with open( results_path, 'a' ) as f:
             writer = csv.writer(f)
-            writer.writerow( [epoch, step, train_loss, train_accuracy, \
+            writer.writerow( [epoch, step, num_visible, train_loss, train_accuracy, \
                             train_perplexity, train_token_entropy, \
                             val_loss, val_accuracy, \
                             val_perplexity, val_token_entropy, \
@@ -488,8 +482,7 @@ def validation_loop(model, valloader, mask_token_id, bar_token_id, condition, pe
 def train_with_curriculum(
     model, optimizer, trainloader, valloader, loss_fn, mask_token_id,
     epochs=100,
-    curriculum_type='random',  # 'random', 'base2'
-    total_stages=10,
+    exponent=5,
     results_path=None,
     transformer_path=None,
     bar_token_id=None,
@@ -506,7 +499,7 @@ def train_with_curriculum(
     # save results and model
     print('results_path:', results_path)
     if results_path is not None:
-        result_fields = ['epoch', 'step', 'train_loss', 'train_acc', \
+        result_fields = ['epoch', 'step', 'n_vis', 'train_loss', 'train_acc', \
                         'train_ppl', 'train_te', 'val_loss', \
                         'val_acc', 'val_ppl', 'val_te', 'sav_version']
         with open( results_path, 'w' ) as f:
@@ -536,51 +529,25 @@ def train_with_curriculum(
             for batch in tepoch:
                 perplexity_metric.reset()
                 model.train()
-                melody_grid = batch["pianoroll"].to(device)           # (B, 256, 100)
-                harmony_gt = batch["input_ids"].to(device)         # (B, 256)
-                conditioning_vec = batch[condition].to(device)  # (B, C0)
+                melody_grid = batch["pianoroll"].to(device)    # (B, L, prDim)
+                harmony_gt = batch["input_ids"].to(device)     # (B, L)
 
-                if condition == 'h_density_complexity':
-                    # randomly neutralize density or complexity conditions for 20% of the batch
-                    B = conditioning_vec.shape[0]
-                    num_neutralize = max(int(0.2 * B), 1)
-                    indices = random.sample(range(B), num_neutralize)
-                    for idx in indices:
-                        if random.random() < 0.5:
-                            # Neutralize indices 0,1,2 to 0 and 3 to 1
-                            conditioning_vec[idx, 0:3] = 0
-                            conditioning_vec[idx, 3] = 1
-                        else:
-                            # Neutralize indices 4,5,6 to 0 and 7 to 1
-                            conditioning_vec[idx, 4:7] = 0
-                            conditioning_vec[idx, 7] = 1
-
-                # # Apply masking to harmony
-                # rets = apply_masking(
-                #     harmony_gt,
-                #     mask_token_id,
-                #     total_stages=total_stages,
-                #     curriculum_type=curriculum_type,
-                #     bar_token_id=bar_token_id
-                # )
                 # Apply masking to harmony
-                percent_visible = min(1.0, (epoch+1)/epochs)**5  # 5th power goes around half way near zero
+                percent_visible = min(1.0, (step+1)/total_steps)**exponent  # 5th power goes around half way near zero
+                L = harmony_gt.shape[1]
+                num_visible = min( int(L * percent_visible), L-1 )  # ensure at least one token is predicted
                 rets = full_to_partial_masking(
                     harmony_gt,
                     mask_token_id,
-                    percent_visible,
+                    num_visible,
                     bar_token_id=bar_token_id
                 )
-
                 harmony_input, harmony_target = rets[0], rets[1]
                 
                 # Forward pass
                 logits = model(
                     melody_grid.to(device),
-                    # harmony_gt.to(device),  # DEBUG
                     harmony_input.to(device),
-                    # stage_indices.to(device),
-                    None
                 )
 
                 # Compute loss only on masked tokens
@@ -617,12 +584,10 @@ def train_with_curriculum(
                         valloader,
                         mask_token_id,
                         bar_token_id,
-                        condition,
-                        percent_visible,
+                        num_visible,
                         loss_fn,
                         epoch,
                         step,
-                        curriculum_type,
                         train_loss,
                         train_accuracy,
                         train_perplexity,

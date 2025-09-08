@@ -10,74 +10,20 @@ from torch.nn import CrossEntropyLoss
 import argparse
 from train_utils import train_with_curriculum
 
-curriculum_types = ['random', 'base2']
-
 def train_demh(
         train_dataset,
         trainloader,
         valloader,
         tokenizer,
-        curriculum_type,
-        total_stages,
+        exponent,
         subfolder,
         device_name,
-        epochs=100,
-        lr=1e-5,
-        batchsize=8,
-        validations_per_epoch=1,
+        epochs=20,
+        lr=1e-4,
+        batchsize=64,
+        validations_per_epoch=10,
         tqdm_position=0
     ):
-
-# def main():
-
-#     # Create the argument parser
-#     parser = argparse.ArgumentParser(description='Script for training a GridMLM model with a specific curriculum type.')
-
-#     # Define arguments
-#     parser.add_argument('-c', '--curriculum', type=str, help='Specify the curriculum type name among: ' + repr(curriculum_types), required=True)
-#     parser.add_argument('-s', '--total_stages', type=int, help='Specify number of stages, applicable to random only.', required=False)
-#     parser.add_argument('-f', '--subfolder', type=str, help='Specify subfolder to save the model and results.', required=False)
-#     parser.add_argument('-d', '--datatrain', type=str, help='Specify the full path to the root folder of the training xml/mxl files', required=True)
-#     parser.add_argument('-v', '--dataval', type=str, help='Specify the full path to the root folder of the validation xml/mxl files', required=True)
-#     parser.add_argument('-g', '--gpu', type=int, help='Specify whether and which GPU will be used by used by index. Not using this argument means use CPU.', required=False)
-#     parser.add_argument('-e', '--epochs', type=int, help='Specify number of epochs. Defaults to 100.', required=False)
-#     parser.add_argument('-l', '--learningrate', type=float, help='Specify learning rate. Defaults to 5e-5.', required=False)
-#     parser.add_argument('-b', '--batchsize', type=int, help='Specify batch size. Defaults to 8.', required=False)
-    
-#     # Parse the arguments
-#     args = parser.parse_args()
-#     curriculum_type = args.curriculum
-#     total_stages = 10
-#     if args.total_stages and curriculum_type == 'random':
-#         total_stages = args.total_stages
-#     elif args.total_stages and curriculum_type == 'step':
-#         total_stages = args.total_stages
-#     subfolder = ''
-#     if args.subfolder:
-#         subfolder = args.subfolder
-#     train_dir = args.datatrain
-#     val_dir = args.dataval
-#     device_name = 'cpu'
-#     if args.gpu is not None:
-#         if args.gpu > -1:
-#             device_name = 'cuda:' + str(args.gpu)
-#     epochs = 50
-#     if args.epochs:
-#         epochs = args.epochs
-#     lr = 5e-5
-#     if args.learningrate:
-#         lr = args.learningrate
-#     batchsize = 8
-#     if args.batchsize:
-#         batchsize = args.batchsize
-
-    # tokenizer = CSGridMLMTokenizer(fixed_length=80, quantization='4th', intertwine_bar_info=True, trim_start=False)
-
-    # train_dataset = CSGridMLMDataset(train_dir, tokenizer, name_suffix='MLMH_bar_qt')
-    # val_dataset = CSGridMLMDataset(val_dir, tokenizer, name_suffix='MLMH_bar_qt')
-
-    # trainloader = DataLoader(train_dataset, batch_size=batchsize, shuffle=True, collate_fn=CSGridMLM_collate_fn)
-    # valloader = DataLoader(val_dataset, batch_size=batchsize, shuffle=False, collate_fn=CSGridMLM_collate_fn)
 
     def compute_class_weights_from_dataset(dataset, tokenizer, scheme="temp", alpha=0.5, beta=0.999, ignore_index=-100):
         """
@@ -137,62 +83,48 @@ def train_demh(
             print('Selected device not available: ' + device_name)
     # end device selection
 
-    # loss_fn=CrossEntropyLoss(ignore_index=-100)
-    # Precompute once before training
-    class_weights = compute_class_weights_from_dataset(
-        train_dataset, tokenizer, scheme="temp", alpha=0.5
-    )
+    loss_fn=CrossEntropyLoss(ignore_index=-100)
+    # # Precompute once before training
+    # class_weights = compute_class_weights_from_dataset(
+    #     train_dataset, tokenizer, scheme="temp", alpha=0.5
+    # )
 
-    # Define loss function with weights
-    loss_fn = torch.nn.CrossEntropyLoss(
-        weight=class_weights.to(device), ignore_index=-100
-    )
+    # # Define loss function with weights
+    # loss_fn = torch.nn.CrossEntropyLoss(
+    #     weight=class_weights.to(device), ignore_index=-100
+    # )
 
     model = DualGridMLMMelHarm(
         chord_vocab_size=len(tokenizer.vocab),
         d_model=512,
-        nhead=8,
-        num_layers_mel=8,
-        num_layers_harm=8,
-        device=device,
+        nhead=4,
+        num_layers_mel=4,
+        num_layers_harm=4,
         melody_length=80,
         harmony_length=80,
-        max_stages=total_stages,
         pianoroll_dim=tokenizer.pianoroll_dim,
+        device=device,
     )
     model.to(device)
     optimizer = AdamW(model.parameters(), lr=lr)
 
+    curriculum_type = 'f2f'
+    
     # save results
     os.makedirs('results/DE/', exist_ok=True)
     os.makedirs('results/DE/' + subfolder + '/', exist_ok=True)
-    if curriculum_type == 'random':
-        results_path = 'results/DE/' + subfolder + '/' + curriculum_type + str(total_stages) + '.csv'
-    else:
-        results_path = 'results/DE/' + subfolder + '/' + curriculum_type + '.csv'
+    results_path = 'results/DE/' + subfolder + '/' + curriculum_type + str(exponent) + '.csv'
 
     os.makedirs('saved_models/DE/', exist_ok=True)
     os.makedirs('saved_models/DE/' + subfolder + '/', exist_ok=True)
     save_dir = 'saved_models/DE/' + subfolder + '/'
-    if curriculum_type == 'random':
-        transformer_path = save_dir + curriculum_type + str(total_stages) + '.pt'
-    else:
-        transformer_path = save_dir + curriculum_type + '.pt'
+    transformer_path = save_dir + curriculum_type + str(exponent) + '.pt'
 
     train_with_curriculum(
         model, optimizer, trainloader, valloader, loss_fn, tokenizer.mask_token_id,
         epochs=epochs,
-        curriculum_type=curriculum_type,  # 'random', 'base2'
-        total_stages=total_stages,
+        exponent=exponent,
         results_path=results_path,
         transformer_path=transformer_path,
-        bar_token_id=tokenizer.bar_token_id,
-        condition='h_density_complexity',
-        validations_per_epoch=validations_per_epoch,
-        tqdm_position=tqdm_position
+        bar_token_id=tokenizer.bar_token_id
     )
-    
-# end main
-
-# if __name__ == '__main__':
-#     main()

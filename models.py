@@ -140,7 +140,6 @@ class DualGridMLMMelHarm(nn.Module):
                  pianoroll_dim=13,      # e.g., PCP + bars only
                  melody_length=80,
                  harmony_length=80,
-                 max_stages=10,
                  dropout=0.3,
                  device='cpu'):
         super().__init__()
@@ -188,7 +187,7 @@ class DualGridMLMMelHarm(nn.Module):
         self.to(device)
     # end init
 
-    def forward(self, melody_grid, harmony_tokens=None, stage_indices=None,
+    def forward(self, melody_grid, harmony_tokens=None,
                 melody_key_padding_mask=None, harm_key_padding_mask=None):
         """
         melody_grid: (B, Lm, pianoroll_dim)  -> melody features (PCP + bar flag etc.)

@@ -11,7 +11,7 @@ import multiprocessing
 
 # TODO: implement argument forwarding of unfold=True/False in models.py
 subfolder = 'all12'
-epochs = 10
+epochs = 20
 validations_per_epoch = 10
 train_dir = '/media/maindisk/data/hooktheory_midi_hr/all12_train'
 val_dir = '/media/maindisk/data/hooktheory_midi_hr/CA_test'
@@ -22,7 +22,7 @@ val_dir = '/media/maindisk/data/hooktheory_midi_hr/CA_test'
 # train_dir = '/media/maindisk/data/hooktheory_hr/hooktheory_all12_train'
 # val_dir = '/media/maindisk/data/hooktheory_hr/hooktheory_all12_test'
 
-batchsize = 8
+batchsize = 64
 
 tokenizer = None
 
@@ -70,49 +70,35 @@ if __name__ == "__main__":
 
     task_args = [
         {
-            'curriculum_type': 'random',
-            'total_stages': 10,
+            'exponent': 5,
             'subfolder': subfolder,
             'device_name': 'cuda:0',
             'epochs': epochs,
-            'lr': 1e-5,
+            'lr': 1e-4,
             'batchsize': batchsize,
             'validations_per_epoch': validations_per_epoch,
             'tqdm_position': 0
         },
         {
-            'curriculum_type': 'random',
-            'total_stages': 20,
+            'exponent': 4,
             'subfolder': subfolder,
-            'device_name': 'cuda:0',
+            'device_name': 'cuda:1',
             'epochs': epochs,
-            'lr': 1e-5,
+            'lr': 1e-4,
             'batchsize': batchsize,
             'validations_per_epoch': validations_per_epoch,
             'tqdm_position': 1
         },
         {
-            'curriculum_type': 'random',
-            'total_stages': 80,
+            'exponent': 6,
             'subfolder': subfolder,
-            'device_name': 'cuda:0',
+            'device_name': 'cuda:2',
             'epochs': epochs,
-            'lr': 1e-5,
+            'lr': 1e-4,
             'batchsize': batchsize,
             'validations_per_epoch': validations_per_epoch,
             'tqdm_position': 2
         },
-        {
-            'curriculum_type': 'step',
-            'total_stages': 80,
-            'subfolder': subfolder,
-            'device_name': 'cuda:0',
-            'epochs': epochs,
-            'lr': 1e-5,
-            'batchsize': batchsize,
-            'validations_per_epoch': validations_per_epoch,
-            'tqdm_position': 3
-        }
     ]
 
     # Use "fork" for memory-efficient sharing (if on Unix)

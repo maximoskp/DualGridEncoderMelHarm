@@ -18,8 +18,7 @@ def main():
     parser = argparse.ArgumentParser(description='Script for training a GridMLM model with a specific curriculum type.')
 
     # Define arguments
-    parser.add_argument('-c', '--curriculum', type=str, help='Specify the curriculum type name among: ' + repr(curriculum_types), required=True)
-    parser.add_argument('-s', '--total_stages', type=int, help='Specify number of stages, applicable to random only.', required=False)
+    parser.add_argument('-x', '--exponent', type=int, help='Unmasking exponent.', required=True)
     parser.add_argument('-f', '--subfolder', type=str, help='Specify subfolder to save the model and results.', required=False)
     parser.add_argument('-d', '--datatrain', type=str, help='Specify the full path to the root folder of the training xml/mxl files', required=True)
     parser.add_argument('-v', '--dataval', type=str, help='Specify the full path to the root folder of the validation xml/mxl files', required=True)
@@ -30,12 +29,10 @@ def main():
     
     # Parse the arguments
     args = parser.parse_args()
-    curriculum_type = args.curriculum
-    total_stages = 10
-    if args.total_stages and curriculum_type == 'random':
-        total_stages = args.total_stages
-    elif args.total_stages and curriculum_type == 'step':
-        total_stages = args.total_stages
+    curriculum_type = 'f2f'
+    exponent = 5
+    if args.exponent:
+        exponent = args.exponent
     subfolder = ''
     if args.subfolder:
         subfolder = args.subfolder
@@ -45,13 +42,13 @@ def main():
     if args.gpu is not None:
         if args.gpu > -1:
             device_name = 'cuda:' + str(args.gpu)
-    epochs = 50
+    epochs = 200
     if args.epochs:
         epochs = args.epochs
-    lr = 5e-5
+    lr = 1e-4
     if args.learningrate:
         lr = args.learningrate
-    batchsize = 8
+    batchsize = 64
     if args.batchsize:
         batchsize = args.batchsize
 
@@ -146,7 +143,6 @@ def main():
         num_layers_harm=4,
         melody_length=80,
         harmony_length=80,
-        max_stages=total_stages,
         pianoroll_dim=tokenizer.pianoroll_dim,
         device=device,
     )
@@ -156,28 +152,20 @@ def main():
     # save results
     os.makedirs('results/DE/', exist_ok=True)
     os.makedirs('results/DE/' + subfolder + '/', exist_ok=True)
-    if curriculum_type == 'random':
-        results_path = 'results/DE/' + subfolder + '/' + curriculum_type + str(total_stages) + '.csv'
-    else:
-        results_path = 'results/DE/' + subfolder + '/' + curriculum_type + '.csv'
+    results_path = 'results/DE/' + subfolder + '/' + curriculum_type + str(exponent) + '.csv'
 
     os.makedirs('saved_models/DE/', exist_ok=True)
     os.makedirs('saved_models/DE/' + subfolder + '/', exist_ok=True)
     save_dir = 'saved_models/DE/' + subfolder + '/'
-    if curriculum_type == 'random':
-        transformer_path = save_dir + curriculum_type + str(total_stages) + '.pt'
-    else:
-        transformer_path = save_dir + curriculum_type + '.pt'
+    transformer_path = save_dir + curriculum_type + str(exponent) + '.pt'
 
     train_with_curriculum(
         model, optimizer, trainloader, valloader, loss_fn, tokenizer.mask_token_id,
         epochs=epochs,
-        curriculum_type=curriculum_type,  # 'random', 'base2'
-        total_stages=total_stages,
+        exponent=exponent,
         results_path=results_path,
         transformer_path=transformer_path,
-        bar_token_id=tokenizer.bar_token_id,
-        condition='h_density_complexity'
+        bar_token_id=tokenizer.bar_token_id
     )
     
 # end main
