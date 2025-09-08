@@ -467,7 +467,7 @@ def validation_loop(model, valloader, mask_token_id, bar_token_id, condition, pe
             # end for batch
     # end with tqdm
     if transformer_path is not None:
-        if best_val_loss > val_loss:
+        if  True: # best_val_loss > val_loss:
             print('saving!')
             saving_version += 1
             best_val_loss = val_loss
