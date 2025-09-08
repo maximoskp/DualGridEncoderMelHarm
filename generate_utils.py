@@ -304,7 +304,7 @@ def beam_token_by_token_generate(
                 logits1 = model(
                     melody_grid=melody_grid.to(model.device),
                     harmony_tokens=visible_harmony.to(model.device),
-                    stage_indices=torch.LongTensor([s]).to(model.device)
+                    # stage_indices=torch.LongTensor([s]).to(model.device)
                 )  # (1, seq_len, vocab_size)
                 logits = logits1
 
@@ -349,7 +349,7 @@ def beam_token_by_token_generate(
                     logits2 = model(
                         melody_grid=focussed_melody_grid.to(model.device),
                         harmony_tokens=visible_harmony.to(model.device),
-                        stage_indices=torch.LongTensor([s]).to(model.device)
+                        # stage_indices=torch.LongTensor([s]).to(model.device)
                     )  # (1, seq_len, vocab_size)
                     logits = logits2
                     # print(f'focal sharpness applied at pos {pos} with sharpness {focal_sharpness}')

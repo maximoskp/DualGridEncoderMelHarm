@@ -115,15 +115,75 @@ def random_progressive_masking(
         num_predict = int(L * percent_predict + 0.5)
 
         visible_idx = perm[:num_visible]
-        predict_idx = perm[:num_visible + num_predict]  # predict includes visible + next unmasked tokens
-        print('visible_idx: ', visible_idx)
-        print('predict_idx: ', predict_idx)
+        predict_idx = perm[num_visible:num_visible + num_predict]  # predict includes visible + next unmasked tokens
+        # print('visible_idx: ', visible_idx)
+        # print('predict_idx: ', predict_idx)
 
         visible_harmony[b, visible_idx] = harmony_tokens[b, visible_idx]
         denoising_target[b, predict_idx] = harmony_tokens[b, predict_idx]
 
+    # visible_harmony = harmony_tokens.clone()
+    # visible_harmony[:, :] = mask_token_id
+    # # visible_harmony[:, 0:10] = mask_token_id
+    # denoising_target = harmony_tokens.clone()  # -100 is ignored by CrossEntropyLoss
+    # # denoising_target[:, 10:] = -100
+
     return visible_harmony, denoising_target, stage_indices
 # end random_progressive_masking
+
+def full_to_partial_masking(
+        harmony_tokens,
+        mask_token_id,
+        percent_visible=0.0,
+        bar_token_id=None
+    ):
+    """
+    Generate visible input and denoising target for diffusion-style training.
+
+    Args:
+        harmony_tokens (torch.Tensor): Tensor of shape (B, L) containing target harmony token ids.
+        stage (int): Current training stage (0 to total_stages - 1).
+        total_stages (int): Total number of diffusion stages.
+        mask_token_id (int): The token ID used to mask hidden positions in visible_harmony.
+        device (str or torch.device): Target device.
+
+    Returns:
+        visible_harmony (torch.Tensor): Tensor of shape (B, L) with visible tokens (others masked).
+        denoising_target (torch.Tensor): Tensor of shape (B, L) with tokens to predict (others = -100).
+    """
+    device = harmony_tokens.device
+    B, L = harmony_tokens.shape
+
+    visible_harmony = torch.full_like(harmony_tokens, fill_value=mask_token_id)
+    denoising_target = torch.full_like(harmony_tokens, fill_value=-100)  # -100 is ignored by CrossEntropyLoss
+
+    if bar_token_id is not None:
+        # Create a mask for bar token positions
+        bar_mask = (harmony_tokens == bar_token_id)
+        # Put bar tokens in visible_harmony (always unmasked)
+        visible_harmony[bar_mask] = bar_token_id
+        # # Also include them in the denoising target (so model predicts them too)
+        # denoising_target[bar_mask] = bar_token_id
+    
+    perm = torch.randperm(L, device=device)
+    num_visible = min( int(L * percent_visible), L-1 )  # ensure at least one token is predicted
+
+    visible_idx = perm[:num_visible]
+    predict_idx = perm[num_visible:]  # predict all remaining
+    # print('visible_idx: ', visible_idx)
+    # print('predict_idx: ', predict_idx)
+
+    visible_harmony[:, visible_idx] = harmony_tokens[:, visible_idx]
+    denoising_target[:, predict_idx] = harmony_tokens[:, predict_idx]
+
+    # visible_harmony = harmony_tokens.clone()
+    # visible_harmony[:, :] = mask_token_id
+    # # visible_harmony[:, 0:10] = mask_token_id
+    # denoising_target = harmony_tokens.clone()  # -100 is ignored by CrossEntropyLoss
+    # # denoising_target[:, 10:] = -100
+
+    return visible_harmony, denoising_target
+# end full_to_partial_masking
 
 def structured_progressive_masking(
         harmony_tokens,
@@ -336,7 +396,7 @@ def apply_focal_sharpness(
     return attenuated_grid
 # end apply_focal_sharpness
 
-def validation_loop(model, valloader, mask_token_id, bar_token_id, condition, total_stages, \
+def validation_loop(model, valloader, mask_token_id, bar_token_id, condition, percent_visible, \
                     loss_fn, epoch, step, \
                     curriculum_type, train_loss, train_accuracy, \
                     train_perplexity, train_token_entropy,
@@ -363,38 +423,22 @@ def validation_loop(model, valloader, mask_token_id, bar_token_id, condition, to
                 conditioning_vec = batch[condition].to(device)  # (B, C0)
                 
                 # Apply masking to harmony
-                rets = apply_masking(
+                rets = full_to_partial_masking(
                     harmony_gt,
                     mask_token_id,
-                    total_stages=total_stages,
-                    curriculum_type=curriculum_type,
+                    percent_visible,
                     bar_token_id=bar_token_id
                 )
 
-                harmony_input, harmony_target, stage_indices = rets[0], rets[1], rets[2]
-                if curriculum_type == 'step':
-                    target_indices = rets[3]
-                    # focal point on melody_grid
-                    B = melody_grid.shape[0]
-                    focal_sharpness = torch.rand(B, 1, device=melody_grid.device)  # values in [0,1]
-                    melody_grid = apply_focal_sharpness(
-                        melody_grid,
-                        target_indices,
-                        focal_sharpness
-                    )
-                    # also integrate focal_sharpness to conditioning_vec
-                    # Ensure focal_sharpness has right shape
-                    if focal_sharpness.dim() == 1:
-                        focal_sharpness = focal_sharpness.unsqueeze(-1)  # [B] -> [B,1]
-                    
-                    # Concatenate along feature dimension
-                    conditioning_vec = torch.cat([conditioning_vec, focal_sharpness], dim=-1)
+                harmony_input, harmony_target = rets[0], rets[1]
 
                 # Forward pass
                 logits = model(
                     melody_grid,
+                    # harmony_gt,  # DEBUG
                     harmony_input,
-                    stage_indices
+                    # stage_indices,
+                    None
                 )
 
                 # Compute loss only on masked tokens
@@ -407,7 +451,8 @@ def validation_loop(model, valloader, mask_token_id, bar_token_id, condition, to
                 # accuracy
                 predictions = logits.argmax(dim=-1)
                 # mask = harmony_target != harmony_input # harmony_target != -100
-                mask = torch.logical_and(harmony_target != harmony_input, harmony_target != -100)
+                # mask = torch.logical_and(harmony_target != harmony_input, harmony_target != -100)
+                mask = harmony_target != -100
                 running_accuracy += (predictions[mask] == harmony_target[mask]).sum().item()/mask.sum().item()
                 val_accuracy = running_accuracy/batch_num
                 # perplexity
@@ -471,8 +516,8 @@ def train_with_curriculum(
     # Compute total training steps
     total_steps = len(trainloader) * epochs
     # Define the scheduler
-    warmup_steps = int(0.1 * total_steps)  # 10% of total steps for warmup
-    scheduler = get_cosine_schedule_with_warmup(optimizer, num_warmup_steps=warmup_steps, num_training_steps=total_steps)
+    # warmup_steps = int(0.1 * total_steps)  # 10% of total steps for warmup
+    # scheduler = get_cosine_schedule_with_warmup(optimizer, num_warmup_steps=warmup_steps, num_training_steps=total_steps)
     step = 0
 
     for epoch in range(epochs):
@@ -510,39 +555,32 @@ def train_with_curriculum(
                             conditioning_vec[idx, 4:7] = 0
                             conditioning_vec[idx, 7] = 1
 
+                # # Apply masking to harmony
+                # rets = apply_masking(
+                #     harmony_gt,
+                #     mask_token_id,
+                #     total_stages=total_stages,
+                #     curriculum_type=curriculum_type,
+                #     bar_token_id=bar_token_id
+                # )
                 # Apply masking to harmony
-                rets = apply_masking(
+                percent_visible = min(1.0, (epoch+1)/epochs)**5  # 5th power goes around half way near zero
+                rets = full_to_partial_masking(
                     harmony_gt,
                     mask_token_id,
-                    total_stages=total_stages,
-                    curriculum_type=curriculum_type,
+                    percent_visible,
                     bar_token_id=bar_token_id
                 )
 
-                harmony_input, harmony_target, stage_indices = rets[0], rets[1], rets[2]
-                if curriculum_type == 'step':
-                    target_indices = rets[3]
-                    # focal point on melody_grid
-                    B = melody_grid.shape[0]
-                    focal_sharpness = torch.rand(B, 1, device=melody_grid.device)  # values in [0,1]
-                    melody_grid = apply_focal_sharpness(
-                        melody_grid,
-                        target_indices,
-                        focal_sharpness
-                    )
-                    # also integrate focal_sharpness to conditioning_vec
-                    # Ensure focal_sharpness has right shape
-                    if focal_sharpness.dim() == 1:
-                        focal_sharpness = focal_sharpness.unsqueeze(-1)  # [B] -> [B,1]
-                    
-                    # Concatenate along feature dimension
-                    conditioning_vec = torch.cat([conditioning_vec, focal_sharpness], dim=-1)
+                harmony_input, harmony_target = rets[0], rets[1]
                 
                 # Forward pass
                 logits = model(
                     melody_grid.to(device),
+                    # harmony_gt.to(device),  # DEBUG
                     harmony_input.to(device),
-                    stage_indices
+                    # stage_indices.to(device),
+                    None
                 )
 
                 # Compute loss only on masked tokens
@@ -551,7 +589,7 @@ def train_with_curriculum(
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
-                scheduler.step()
+                # scheduler.step()
 
                 # update loss and accuracy
                 batch_num += 1
@@ -559,7 +597,8 @@ def train_with_curriculum(
                 train_loss = running_loss/batch_num
                 # accuracy
                 predictions = logits.argmax(dim=-1)
-                mask = torch.logical_and(harmony_target != harmony_input, harmony_target != -100)
+                # mask = torch.logical_and(harmony_target != harmony_input, harmony_target != -100)
+                mask = harmony_target != -100
                 running_accuracy += (predictions[mask] == harmony_target[mask]).sum().item()/max(1,mask.sum().item())
                 train_accuracy = running_accuracy/batch_num
                 # perplexity
@@ -579,7 +618,7 @@ def train_with_curriculum(
                         mask_token_id,
                         bar_token_id,
                         condition,
-                        total_stages,
+                        percent_visible,
                         loss_fn,
                         epoch,
                         step,

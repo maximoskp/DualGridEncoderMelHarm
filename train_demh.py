@@ -128,27 +128,27 @@ def main():
             print('Selected device not available: ' + device_name)
     # end device selection
     
-    # loss_fn=CrossEntropyLoss(ignore_index=-100)
-    # Precompute once before training
-    class_weights = compute_class_weights_from_dataset(
-        train_dataset, tokenizer, scheme="temp", alpha=0.5
-    )
+    loss_fn=CrossEntropyLoss(ignore_index=-100)
+    # # Precompute once before training
+    # class_weights = compute_class_weights_from_dataset(
+    #     train_dataset, tokenizer, scheme="temp", alpha=0.5
+    # )
 
-    # Define loss function with weights
-    loss_fn = torch.nn.CrossEntropyLoss(
-        weight=class_weights.to(device), ignore_index=-100
-    )
+    # # Define loss function with weights
+    # loss_fn = torch.nn.CrossEntropyLoss(
+    #     weight=class_weights.to(device), ignore_index=-100
+    # )
     model = DualGridMLMMelHarm(
         chord_vocab_size=len(tokenizer.vocab),
         d_model=512,
-        nhead=8,
-        num_layers_mel=8,
-        num_layers_harm=8,
+        nhead=4,
+        num_layers_mel=4,
+        num_layers_harm=4,
         melody_length=80,
         harmony_length=80,
         max_stages=total_stages,
         pianoroll_dim=tokenizer.pianoroll_dim,
-        device=device
+        device=device,
     )
     model.to(device)
     optimizer = AdamW(model.parameters(), lr=lr)
