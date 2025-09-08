@@ -22,7 +22,7 @@ val_dir = '/media/maindisk/data/hooktheory_midi_hr/CA_test'
 # train_dir = '/media/maindisk/data/hooktheory_hr/hooktheory_all12_train'
 # val_dir = '/media/maindisk/data/hooktheory_hr/hooktheory_all12_test'
 
-batchsize = 64
+batchsize = 16
 
 tokenizer = None
 
@@ -92,7 +92,7 @@ if __name__ == "__main__":
         {
             'exponent': 6,
             'subfolder': subfolder,
-            'device_name': 'cuda:2',
+            'device_name': 'cuda:1',
             'epochs': epochs,
             'lr': 1e-4,
             'batchsize': batchsize,

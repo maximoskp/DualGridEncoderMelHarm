@@ -20,7 +20,7 @@ def train_demh(
         device_name,
         epochs=20,
         lr=1e-4,
-        batchsize=64,
+        batchsize=16,
         validations_per_epoch=10,
         tqdm_position=0
     ):
@@ -109,7 +109,7 @@ def train_demh(
     optimizer = AdamW(model.parameters(), lr=lr)
 
     curriculum_type = 'f2f'
-    
+
     # save results
     os.makedirs('results/DE/', exist_ok=True)
     os.makedirs('results/DE/' + subfolder + '/', exist_ok=True)

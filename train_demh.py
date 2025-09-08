@@ -48,7 +48,7 @@ def main():
     lr = 1e-4
     if args.learningrate:
         lr = args.learningrate
-    batchsize = 64
+    batchsize = 16
     if args.batchsize:
         batchsize = args.batchsize
 
