@@ -629,18 +629,16 @@ def save_harmonized_score(score, title="Harmonized Piece", out_path="harmonized.
 
 def load_model(
     d_model=512, 
-    nhead=8, 
-    num_layers_mel=8,
-    num_layers_harm=8,
-    curriculum_type='random',
+    nhead=4, 
+    num_layers_mel=4,
+    num_layers_harm=4,
+    curriculum_type='f2f',
     subfolder=None,
     device_name='cuda:0',
     tokenizer=None,
-    total_stages=10,
-    conditioning_dim=16,
     melody_length=80,
     harmony_length=80,
-    max_stages=10,
+    exponent=5,
 ):
     if device_name == 'cpu':
         device = torch.device('cpu')
@@ -659,45 +657,9 @@ def load_model(
         device=device,
         melody_length=melody_length,
         harmony_length=harmony_length,
-        max_stages=total_stages,
         pianoroll_dim=tokenizer.pianoroll_dim,
     )
-    if curriculum_type == 'random':
-        model_path = 'saved_models/' + subfolder + '/' + curriculum_type + str(total_stages) +  '.pt'
-    else:
-        model_path = 'saved_models/' + subfolder + '/' + curriculum_type +  '.pt'
-    # checkpoint = torch.load(model_path, map_location=device_name, weights_only=True)
-    checkpoint = torch.load(model_path, map_location=device_name)
-    model.load_state_dict(checkpoint)
-    model.eval()
-    model.to(device)
-    return model
-# end load_model
-
-def load_model_no_stage(
-    curriculum_type='random',
-    subfolder='CA',
-    device_name='cuda:0',
-    tokenizer=None,
-    total_stages=10
-):
-    if device_name == 'cpu':
-        device = torch.device('cpu')
-    else:
-        if torch.cuda.is_available():
-            device = torch.device(device_name)
-        else:
-            print('Selected device not available: ' + device_name)
-            device = torch.device('cpu')
-    model = GridMLMMelHarmNoStage(
-        chord_vocab_size=len(tokenizer.vocab),
-        device=device,
-        max_stages=total_stages
-    )
-    if curriculum_type == 'random':
-        model_path = 'saved_models/' + subfolder + '/no_stage/' + curriculum_type + str(total_stages) +  '.pt'
-    else:
-        model_path = 'saved_models/' + subfolder + '/no_stage/' + curriculum_type + '.pt'
+    model_path = 'saved_models/' + subfolder + '/' + curriculum_type + str(exponent) +  '.pt'
     # checkpoint = torch.load(model_path, map_location=device_name, weights_only=True)
     checkpoint = torch.load(model_path, map_location=device_name)
     model.load_state_dict(checkpoint)

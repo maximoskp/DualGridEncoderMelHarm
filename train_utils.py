@@ -486,7 +486,6 @@ def train_with_curriculum(
     results_path=None,
     transformer_path=None,
     bar_token_id=None,
-    condition='time_signature',
     validations_per_epoch=1,
     tqdm_position=0
 ):

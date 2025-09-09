@@ -3,9 +3,9 @@
 # List of Python scripts with their respective arguments
 
 scripts=(
-    "train_demh.py -x 5 -f CA -d /media/maindisk/data/hooktheory_midi_hr/CA_train -v /media/maindisk/data/hooktheory_midi_hr/CA_test -g 0 -e 200 -l 1e-4 -b 16"
-    "train_demh.py -x 4 -f CA -d /media/maindisk/data/hooktheory_midi_hr/CA_train -v /media/maindisk/data/hooktheory_midi_hr/CA_test -g 0 -e 200 -l 1e-4 -b 16"
-    "train_demh.py -x 6 -f CA -d /media/maindisk/data/hooktheory_midi_hr/CA_train -v /media/maindisk/data/hooktheory_midi_hr/CA_test -g 1 -e 200 -l 1e-4 -b 16"
+    "train_demh.py -x 5 -f CA -d /media/maindisk/data/hooktheory_midi_hr/CA_train -v /media/maindisk/data/hooktheory_midi_hr/CA_test -g 0 -e 200 -l 1e-4 -b 32"
+    "train_demh.py -x 4 -f CA -d /media/maindisk/data/hooktheory_midi_hr/CA_train -v /media/maindisk/data/hooktheory_midi_hr/CA_test -g 0 -e 200 -l 1e-4 -b 32"
+    "train_demh.py -x 6 -f CA -d /media/maindisk/data/hooktheory_midi_hr/CA_train -v /media/maindisk/data/hooktheory_midi_hr/CA_test -g 1 -e 200 -l 1e-4 -b 32"
 )
 
 # Name of the conda environment

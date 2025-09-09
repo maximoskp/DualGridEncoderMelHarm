@@ -22,7 +22,7 @@ val_dir = '/media/maindisk/data/hooktheory_midi_hr/CA_test'
 # train_dir = '/media/maindisk/data/hooktheory_hr/hooktheory_all12_train'
 # val_dir = '/media/maindisk/data/hooktheory_hr/hooktheory_all12_test'
 
-batchsize = 16
+batchsize = 32
 
 tokenizer = None
 
@@ -75,7 +75,6 @@ if __name__ == "__main__":
             'device_name': 'cuda:0',
             'epochs': epochs,
             'lr': 1e-4,
-            'batchsize': batchsize,
             'validations_per_epoch': validations_per_epoch,
             'tqdm_position': 0
         },
@@ -85,7 +84,6 @@ if __name__ == "__main__":
             'device_name': 'cuda:1',
             'epochs': epochs,
             'lr': 1e-4,
-            'batchsize': batchsize,
             'validations_per_epoch': validations_per_epoch,
             'tqdm_position': 1
         },
@@ -95,7 +93,6 @@ if __name__ == "__main__":
             'device_name': 'cuda:1',
             'epochs': epochs,
             'lr': 1e-4,
-            'batchsize': batchsize,
             'validations_per_epoch': validations_per_epoch,
             'tqdm_position': 2
         },

@@ -20,7 +20,6 @@ def train_demh(
         device_name,
         epochs=20,
         lr=1e-4,
-        batchsize=16,
         validations_per_epoch=10,
         tqdm_position=0
     ):
@@ -126,5 +125,7 @@ def train_demh(
         exponent=exponent,
         results_path=results_path,
         transformer_path=transformer_path,
-        bar_token_id=tokenizer.bar_token_id
+        bar_token_id=tokenizer.bar_token_id,
+        validations_per_epoch=validations_per_epoch,
+        tqdm_position=tqdm_position
     )
