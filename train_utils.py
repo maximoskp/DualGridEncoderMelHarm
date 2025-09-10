@@ -466,6 +466,9 @@ def validation_loop(model, valloader, mask_token_id, bar_token_id, num_visible, 
             saving_version += 1
             best_val_loss = val_loss
             torch.save(model.state_dict(), transformer_path)
+        if num_visible in [0, 5, 15, 30, 31, 50, 51]:
+            # save intermediate models at key points
+            torch.save(model.state_dict(), transformer_path[:-3] + f'_nvis{num_visible}.pt')
     print(f'validation: accuracy={val_accuracy}, loss={val_loss}')
     print('results_path: ', results_path)
     if results_path is not None:
