@@ -70,7 +70,7 @@ if __name__ == "__main__":
 
     task_args = [
         {
-            'exponent': 5,
+            'exponent': 7,
             'subfolder': subfolder,
             'device_name': 'cuda:0',
             'epochs': epochs,
@@ -79,7 +79,7 @@ if __name__ == "__main__":
             'tqdm_position': 0
         },
         {
-            'exponent': 4,
+            'exponent': 9,
             'subfolder': subfolder,
             'device_name': 'cuda:1',
             'epochs': epochs,
@@ -88,7 +88,7 @@ if __name__ == "__main__":
             'tqdm_position': 1
         },
         {
-            'exponent': 6,
+            'exponent': 13,
             'subfolder': subfolder,
             'device_name': 'cuda:1',
             'epochs': epochs,
