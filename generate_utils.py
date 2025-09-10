@@ -610,6 +610,7 @@ def load_DE_model(
     melody_length=80,
     harmony_length=80,
     exponent=5,
+    nvis=None
 ):
     if device_name == 'cpu':
         device = torch.device('cpu')
@@ -630,7 +631,10 @@ def load_DE_model(
         harmony_length=harmony_length,
         pianoroll_dim=tokenizer.pianoroll_dim,
     )
-    model_path = 'saved_models/' + subfolder + '/' + curriculum_type + str(exponent) +  '.pt'
+    model_path = 'saved_models/' + subfolder + '/' + curriculum_type + str(exponent)
+    if nvis is not None:
+        model_path += '_nvis' + str(nvis)
+    model_path += '.pt'
     # checkpoint = torch.load(model_path, map_location=device_name, weights_only=True)
     checkpoint = torch.load(model_path, map_location=device_name)
     model.load_state_dict(checkpoint)
@@ -649,6 +653,7 @@ def load_SE_model(
     tokenizer=None,
     grid_length=80,
     exponent=5,
+    nvis=None,
 ):
     if device_name == 'cpu':
         device = torch.device('cpu')
@@ -667,7 +672,10 @@ def load_SE_model(
         grid_length=grid_length,
         pianoroll_dim=tokenizer.pianoroll_dim,
     )
-    model_path = 'saved_models/' + subfolder + '/' + curriculum_type + str(exponent) +  '.pt'
+    model_path = 'saved_models/' + subfolder + '/' + curriculum_type + str(exponent)
+    if nvis is not None:
+        model_path += '_nvis' + str(nvis)
+    model_path += '.pt'
     # checkpoint = torch.load(model_path, map_location=device_name, weights_only=True)
     checkpoint = torch.load(model_path, map_location=device_name)
     model.load_state_dict(checkpoint)
