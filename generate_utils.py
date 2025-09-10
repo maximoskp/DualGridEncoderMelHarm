@@ -5,7 +5,7 @@ from music21 import harmony, stream, metadata, chord, note, key, meter, tempo, d
 import mir_eval
 import numpy as np
 from copy import deepcopy
-from models import DualGridMLMMelHarm
+from models import DualGridMLMMelHarm, SingleGridMLMelHarm
 import os
 from music_utils import transpose_score
 
@@ -247,8 +247,6 @@ def greedy_token_by_token_generate(
 def beam_token_by_token_generate(
         model,
         melody_grid,            # (1, seq_len, input_dim)
-        conditioning_vec,       # (1, cond_dim)
-        num_stages,             # e.g., 10
         mask_token_id,          # token ID used for masking
         bar_token_id,           # token ID for bar markers
         temperature=1.0,        # optional softmax temperature
@@ -256,11 +254,9 @@ def beam_token_by_token_generate(
         nc_token_id=None,       # token ID for <nc>
         force_fill=True,        # disallow <pad>/<nc> before melody ends
         chord_constraints=None, # chord + bar constraints
-        max_steps=None,         # optional limit on number of iterations
         beam_size=5,            # number of beams to keep
         top_k=5,                # number of candidates per expansion
         unmasking_order='random', # in ['random', 'start', 'end', 'certain', 'uncertain']
-        focal_sharpness=0.0
     ):
     device = melody_grid.device
     seq_len = melody_grid.shape[1]
@@ -289,16 +285,9 @@ def beam_token_by_token_generate(
     
     step = 0
     while any((bh[0] == mask_token_id).any() for bh in beams):
-        if max_steps is not None and step >= max_steps:
-            break
-
         candidates = []
         # print('entering beams==========================================')
         for visible_harmony, score, avg_diffs, prev_logits in beams:
-            
-            num_masked = (visible_harmony == mask_token_id).sum().item()
-            num_unmasked = total_tokens - num_masked
-            s = max(round((num_unmasked / total_tokens) * num_stages)-1, 0)
 
             with torch.no_grad():
                 logits1 = model(
@@ -337,24 +326,6 @@ def beam_token_by_token_generate(
                 print('Unknown unmasking order: ', unmasking_order, '. Doing random.')
                 # pick position at random
                 pos = masked_positions[torch.randint(0, masked_positions.numel(), (1,))].item()
-            
-            # now apply focal sharpness if needed
-            if focal_sharpness > 0.0:
-                focussed_melody_grid = apply_focal_sharpness(
-                    melody_grid,
-                    torch.tensor(pos).reshape(1,1).to(model.device),
-                    focal_sharpness
-                )
-                with torch.no_grad():
-                    logits2 = model(
-                        melody_grid=focussed_melody_grid.to(model.device),
-                        harmony_tokens=visible_harmony.to(model.device),
-                        # stage_indices=torch.LongTensor([s]).to(model.device)
-                    )  # (1, seq_len, vocab_size)
-                    logits = logits2
-                    # print(f'focal sharpness applied at pos {pos} with sharpness {focal_sharpness}')
-                    # print('melody grid diff norm: ', torch.norm(melody_grid - focussed_melody_grid).item() )
-                    # print('logits diff norm: ', torch.norm(logits1[0, pos] - logits2[0, pos]).item() )
 
             # Mask out invalid predictions if enforcing force_fill
             if force_fill and (pad_token_id is not None and nc_token_id is not None):
@@ -627,7 +598,7 @@ def save_harmonized_score(score, title="Harmonized Piece", out_path="harmonized.
         print('uknown file format for file: ', out_path)
 # end save_harmonized_score
 
-def load_model(
+def load_DE_model(
     d_model=512, 
     nhead=4, 
     num_layers_mel=4,
@@ -666,7 +637,44 @@ def load_model(
     model.eval()
     model.to(device)
     return model
-# end load_model
+# end load_DE_model
+
+def load_SE_model(
+    d_model=512, 
+    nhead=4, 
+    num_layers=4,
+    curriculum_type='f2f',
+    subfolder=None,
+    device_name='cuda:0',
+    tokenizer=None,
+    grid_length=80,
+    exponent=5,
+):
+    if device_name == 'cpu':
+        device = torch.device('cpu')
+    else:
+        if torch.cuda.is_available():
+            device = torch.device(device_name)
+        else:
+            print('Selected device not available: ' + device_name)
+            device = torch.device('cpu')
+    model = SingleGridMLMelHarm(
+        chord_vocab_size=len(tokenizer.vocab),
+        d_model=d_model,
+        nhead=nhead,
+        num_layers=num_layers,
+        device=device,
+        grid_length=grid_length,
+        pianoroll_dim=tokenizer.pianoroll_dim,
+    )
+    model_path = 'saved_models/' + subfolder + '/' + curriculum_type + str(exponent) +  '.pt'
+    # checkpoint = torch.load(model_path, map_location=device_name, weights_only=True)
+    checkpoint = torch.load(model_path, map_location=device_name)
+    model.load_state_dict(checkpoint)
+    model.eval()
+    model.to(device)
+    return model
+# end load_SE_model
 
 def generate_files_with_base2(
         model,
@@ -916,19 +924,13 @@ def generate_files_with_beam(
         mxl_folder,
         midi_folder,
         name_suffix,
-        curriculum_type='random',
         use_constraints=False,
-        condition='time_signature',
-        force_condition=None,
         intertwine_bar_info=False, # no bar default
-        trim_start=True, # no bar default
         normalize_tonality=False,
-        num_stages=10,
         temperature=1.0,
         beam_size=5,
         top_k=5,
-        unmasking_order='random',
-        focal_sharpness=0.0
+        unmasking_order='random'
     ):
     # we cannot have intertwine_bar_info == True and use_constraints == False
     # because bar information is passed through the constraints
@@ -952,17 +954,10 @@ def generate_files_with_beam(
     if intertwine_bar_info and not use_constraints:
         harmony_input[ harmony_input != tokenizer.bar_token_id ] = tokenizer.mask_token_id
     melody_grid = torch.FloatTensor( input_encoded['pianoroll'] ).reshape( 1, input_encoded['pianoroll'].shape[0], input_encoded['pianoroll'].shape[1] )
-    conditioning_vec = torch.FloatTensor( input_encoded[condition] ).reshape( 1, len(input_encoded[condition]) )
-    if force_condition is not None:
-        conditioning_vec = torch.FloatTensor( force_condition ).reshape( 1, len(force_condition) )
-    if curriculum_type == 'step':
-        conditioning_vec = torch.cat([conditioning_vec, torch.tensor([[focal_sharpness]], device=conditioning_vec.device, dtype=conditioning_vec.dtype)], dim=1)
     
     random_generated_harmony, avg_diffs = beam_token_by_token_generate(
         model=model,
         melody_grid=melody_grid.to(model.device),
-        conditioning_vec=conditioning_vec.to(model.device),
-        num_stages=num_stages,
         mask_token_id=tokenizer.mask_token_id,
         bar_token_id=tokenizer.bar_token_id,
         temperature=temperature,
@@ -973,7 +968,6 @@ def generate_files_with_beam(
         beam_size=beam_size,
         top_k=top_k,
         unmasking_order=unmasking_order,
-        focal_sharpness=focal_sharpness
     )
     gen_output_tokens = []
     for t in random_generated_harmony[0].tolist():
@@ -991,10 +985,12 @@ def generate_files_with_beam(
     )
     if normalize_tonality:
         gen_score = transpose_score(gen_score, input_encoded['back_interval'])
-    mxl_file_name = os.path.join(mxl_folder, f'gen_{name_suffix}' + '.mxl')
-    midi_file_name = os.path.join(midi_folder, f'gen_{name_suffix}' + '.mid')
-    save_harmonized_score(gen_score, out_path=mxl_file_name)
-    save_harmonized_score(gen_score, out_path=midi_file_name)
+    if mxl_folder is not None:
+        mxl_file_name = os.path.join(mxl_folder, f'gen_{name_suffix}' + '.mxl')
+        save_harmonized_score(gen_score, out_path=mxl_file_name)
+    if midi_folder is not None:
+        midi_file_name = os.path.join(midi_folder, f'gen_{name_suffix}' + '.mid')
+        save_harmonized_score(gen_score, out_path=midi_file_name)
     # os.system(f'QT_QPA_PLATFORM=offscreen mscore -o {midi_file_name} {mxl_file_name}')
 
     real_score = overlay_generated_harmony(
@@ -1006,10 +1002,12 @@ def generate_files_with_beam(
     
     if normalize_tonality:
         real_score = transpose_score(real_score, input_encoded['back_interval'])
-    mxl_file_name = os.path.join(mxl_folder, f'real_{name_suffix}' + '.mxl')
-    midi_file_name = os.path.join(midi_folder, f'real_{name_suffix}' + '.mid')
-    save_harmonized_score(real_score, out_path=mxl_file_name)
-    save_harmonized_score(real_score, out_path=midi_file_name)
+    if mxl_folder is not None:
+        mxl_file_name = os.path.join(mxl_folder, f'real_{name_suffix}' + '.mxl')
+        save_harmonized_score(real_score, out_path=mxl_file_name)
+    if midi_folder is not None:
+        midi_file_name = os.path.join(midi_folder, f'real_{name_suffix}' + '.mid')
+        save_harmonized_score(real_score, out_path=midi_file_name)
     # os.system(f'QT_QPA_PLATFORM=offscreen mscore -o {midi_file_name} {mxl_file_name}')
 
     return gen_output_tokens, harmony_real_tokens, gen_score, real_score, avg_diffs

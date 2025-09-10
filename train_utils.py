@@ -163,7 +163,7 @@ def full_to_partial_masking(
         # Put bar tokens in visible_harmony (always unmasked)
         visible_harmony[bar_mask] = bar_token_id
         # # Also include them in the denoising target (so model predicts them too)
-        # denoising_target[bar_mask] = bar_token_id
+        denoising_target[bar_mask] = bar_token_id
     
     perm = torch.randperm(L, device=device)
 

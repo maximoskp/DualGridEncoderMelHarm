@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+from torch.nn import TransformerEncoderLayer
 import math
 from copy import deepcopy
 
@@ -26,7 +27,7 @@ class HarmonyEncoderLayerWithCross(nn.Module):
     Stores last attention weights for diagnostics.
     """
     def __init__(
-                self, 
+                self,
                 d_model, 
                 nhead, 
                 dim_feedforward=2048, 
@@ -253,6 +254,31 @@ class DualGridMLMMelHarm(nn.Module):
 
 # ========== SINGLE ENCODER MODEL ==========
 
+class TransformerEncoderLayerWithAttn(TransformerEncoderLayer):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.last_attn_weights = None  # place to store the weights
+
+    def forward(self, src, src_mask=None, src_key_padding_mask=None, **kwargs):
+        # same as parent forward, except we intercept attn_weights
+        src2, attn_weights = self.self_attn(
+            src, src, src,
+            attn_mask=src_mask,
+            key_padding_mask=src_key_padding_mask,
+            need_weights=True,
+            average_attn_weights=False
+        )
+        self.last_attn_weights = attn_weights.detach()  # store for later
+
+        # rest of the computation is copied from TransformerEncoderLayer
+        src = src + self.dropout1(src2)
+        src = self.norm1(src)
+        src2 = self.linear2(self.dropout(self.activation(self.linear1(src))))
+        src = src + self.dropout2(src2)
+        src = self.norm2(src)
+        return src
+# end TransformerEncoderLayerWithAttn
+
 class SingleGridMLMelHarm(nn.Module):
     def __init__(self, 
                  chord_vocab_size,  # V
@@ -283,7 +309,7 @@ class SingleGridMLMelHarm(nn.Module):
         # Dropout
         self.dropout = nn.Dropout(dropout)
         # Transformer Encoder
-        encoder_layer = nn.TransformerEncoderLayer(d_model=d_model, 
+        encoder_layer = TransformerEncoderLayerWithAttn(d_model=d_model, 
                                                    nhead=nhead, 
                                                    dim_feedforward=dim_feedforward,
                                                    dropout=dropout,
@@ -338,4 +364,17 @@ class SingleGridMLMelHarm(nn.Module):
 
         return harmony_output
     # end forward
+
+    # optionally add helpers to extract attention maps across layers:
+    def get_attention_maps(self):
+        """
+        Returns lists of per-layer attention tensors for self and cross attentions.
+            self_attns = [layer.last_self_attn, ...]
+        Each element can be None (if not computed) or a tensor (B, nhead, Lh, Lh)/(B, nhead, Lh, Lm).
+        """
+        self_attns = []
+        for layer in self.encoder.layers:
+            self_attns.append(layer.last_attn_weights)
+        return self_attns
+    # end get_attention_maps
 # end class SingleGridMLMelHarm
