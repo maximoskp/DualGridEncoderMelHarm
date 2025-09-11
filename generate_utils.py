@@ -458,7 +458,7 @@ def overlay_generated_harmony(melody_part, generated_chords, ql_per_16th, skip_s
     # Create deep copy of flat melody part
     # Create a new part for filtered content
     filtered_part = stream.Part()
-    filtered_part.id = melody_part.id  # Preserve ID
+    # filtered_part.id = melody_part.id  # Preserve ID
 
     # Copy key and time signatures from the original part
     for el in melody_part.recurse().getElementsByClass((key.KeySignature, meter.TimeSignature,  tempo.MetronomeMark)):
@@ -938,7 +938,9 @@ def generate_files_with_beam(
         temperature=1.0,
         beam_size=5,
         top_k=5,
-        unmasking_order='random'
+        unmasking_order='random',
+        create_gen=True,
+        create_real=False
     ):
     # we cannot have intertwine_bar_info == True and use_constraints == False
     # because bar information is passed through the constraints
@@ -962,61 +964,66 @@ def generate_files_with_beam(
     if intertwine_bar_info and not use_constraints:
         harmony_input[ harmony_input != tokenizer.bar_token_id ] = tokenizer.mask_token_id
     melody_grid = torch.FloatTensor( input_encoded['pianoroll'] ).reshape( 1, input_encoded['pianoroll'].shape[0], input_encoded['pianoroll'].shape[1] )
-    
-    random_generated_harmony, avg_diffs = beam_token_by_token_generate(
-        model=model,
-        melody_grid=melody_grid.to(model.device),
-        mask_token_id=tokenizer.mask_token_id,
-        bar_token_id=tokenizer.bar_token_id,
-        temperature=temperature,
-        pad_token_id=pad_token_id,      # token ID for <pad>
-        nc_token_id=nc_token_id,       # token ID for <nc>
-        force_fill=True,         # disallow <pad>/<nc> before melody ends
-        chord_constraints = harmony_input.to(model.device) if use_constraints or intertwine_bar_info else None,
-        beam_size=beam_size,
-        top_k=top_k,
-        unmasking_order=unmasking_order,
-    )
-    gen_output_tokens = []
-    for t in random_generated_harmony[0].tolist():
-        gen_output_tokens.append( tokenizer.ids_to_tokens[t] )
+    if create_gen:
+        random_generated_harmony, avg_diffs = beam_token_by_token_generate(
+            model=model,
+            melody_grid=melody_grid.to(model.device),
+            mask_token_id=tokenizer.mask_token_id,
+            bar_token_id=tokenizer.bar_token_id,
+            temperature=temperature,
+            pad_token_id=pad_token_id,      # token ID for <pad>
+            nc_token_id=nc_token_id,       # token ID for <nc>
+            force_fill=True,         # disallow <pad>/<nc> before melody ends
+            chord_constraints = harmony_input.to(model.device) if use_constraints or intertwine_bar_info else None,
+            beam_size=beam_size,
+            top_k=top_k,
+            unmasking_order=unmasking_order,
+        )
+        gen_output_tokens = []
+        for t in random_generated_harmony[0].tolist():
+            gen_output_tokens.append( tokenizer.ids_to_tokens[t] )
+    else:
+        avg_diffs = None
+        gen_output_tokens = None
     # keep ground truth
     harmony_real_tokens = []
     for t in harmony_real[0].tolist():
         harmony_real_tokens.append( tokenizer.ids_to_tokens[t] )
-    
-    gen_score = overlay_generated_harmony(
-        input_encoded['melody_part'],
-        gen_output_tokens,
-        input_encoded['ql_per_quantum'],
-        input_encoded['skip_steps']
-    )
-    if normalize_tonality:
-        gen_score = transpose_score(gen_score, input_encoded['back_interval'])
-    if mxl_folder is not None:
-        mxl_file_name = os.path.join(mxl_folder, f'gen_{name_suffix}' + '.mxl')
-        save_harmonized_score(gen_score, out_path=mxl_file_name)
-    if midi_folder is not None:
-        midi_file_name = os.path.join(midi_folder, f'gen_{name_suffix}' + '.mid')
-        save_harmonized_score(gen_score, out_path=midi_file_name)
-    # os.system(f'QT_QPA_PLATFORM=offscreen mscore -o {midi_file_name} {mxl_file_name}')
-
-    real_score = overlay_generated_harmony(
-        input_encoded['melody_part'],
-        harmony_real_tokens,
-        input_encoded['ql_per_quantum'],
-        input_encoded['skip_steps']
-    )
-    
-    if normalize_tonality:
-        real_score = transpose_score(real_score, input_encoded['back_interval'])
-    if mxl_folder is not None:
-        mxl_file_name = os.path.join(mxl_folder, f'real_{name_suffix}' + '.mxl')
-        save_harmonized_score(real_score, out_path=mxl_file_name)
-    if midi_folder is not None:
-        midi_file_name = os.path.join(midi_folder, f'real_{name_suffix}' + '.mid')
-        save_harmonized_score(real_score, out_path=midi_file_name)
-    # os.system(f'QT_QPA_PLATFORM=offscreen mscore -o {midi_file_name} {mxl_file_name}')
+    gen_score = None
+    real_score = None
+    if create_gen:
+        gen_score = overlay_generated_harmony(
+            input_encoded['melody_part'],
+            gen_output_tokens,
+            input_encoded['ql_per_quantum'],
+            input_encoded['skip_steps']
+        )
+        if normalize_tonality:
+            gen_score = transpose_score(gen_score, input_encoded['back_interval'])
+        if mxl_folder is not None:
+            mxl_file_name = os.path.join(mxl_folder, f'gen_{name_suffix}' + '.mxl')
+            save_harmonized_score(gen_score, out_path=mxl_file_name)
+        if midi_folder is not None:
+            midi_file_name = os.path.join(midi_folder, f'gen_{name_suffix}' + '.mid')
+            save_harmonized_score(gen_score, out_path=midi_file_name)
+        # os.system(f'QT_QPA_PLATFORM=offscreen mscore -o {midi_file_name} {mxl_file_name}')
+    if create_real:
+        real_score = overlay_generated_harmony(
+            input_encoded['melody_part'],
+            harmony_real_tokens,
+            input_encoded['ql_per_quantum'],
+            input_encoded['skip_steps']
+        )
+        
+        if normalize_tonality:
+            real_score = transpose_score(real_score, input_encoded['back_interval'])
+        if mxl_folder is not None:
+            mxl_file_name = os.path.join(mxl_folder, f'real_{name_suffix}' + '.mxl')
+            save_harmonized_score(real_score, out_path=mxl_file_name)
+        if midi_folder is not None:
+            midi_file_name = os.path.join(midi_folder, f'real_{name_suffix}' + '.mid')
+            save_harmonized_score(real_score, out_path=midi_file_name)
+        # os.system(f'QT_QPA_PLATFORM=offscreen mscore -o {midi_file_name} {mxl_file_name}')
 
     return gen_output_tokens, harmony_real_tokens, gen_score, real_score, avg_diffs
 # end generate_files_with_beam
