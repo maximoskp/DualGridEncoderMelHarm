@@ -1,9 +1,10 @@
-from generate_utils import generate_files_with_beam, load_DE_model, load_SE_model
+from generate_utils import generate_files_with_nucleus, generate_files_with_beam, load_DE_model, load_SE_model
 from GridMLM_tokenizers import CSGridMLMTokenizer
 import os
 from tqdm import tqdm
 
-device_name = 'cuda:1'
+device_name = 'cuda:0'
+base_folder = 'MIDIs_nucleus_t05_p09/'
 
 tokenizer = CSGridMLMTokenizer(
         fixed_length=80,
@@ -54,8 +55,8 @@ subfolder = 'SE/CA'
 
 model = load_SE_model(
     d_model=512, 
-    nhead=4, 
-    num_layers=4,
+    nhead=8, 
+    num_layers=8,
     curriculum_type=curriculum_type,
     subfolder=subfolder,
     device_name=device_name,
@@ -67,11 +68,11 @@ model = load_SE_model(
 
 # first create real
 print('creating real')
-midi_folder = 'MIDIs/real/'
+midi_folder = base_folder + 'real/'
 os.makedirs(midi_folder, exist_ok=True)
 for val_idx in tqdm(range(len(data_files))):
     input_f = data_files[val_idx]
-    gen_harm, real_harm, gen_score, real_score, avg_diffs = generate_files_with_beam(
+    gen_harm, real_harm, gen_score, real_score = generate_files_with_nucleus(
         model=model,
         tokenizer=tokenizer,
         input_f=input_f,
@@ -81,9 +82,8 @@ for val_idx in tqdm(range(len(data_files))):
         intertwine_bar_info=True,
         normalize_tonality=False,
         use_constraints=False,
-        temperature=1.0,
-        beam_size=5,
-        top_k=50,
+        temperature=0.5,
+        p=0.9,
         unmasking_order=unmasking_order, # in ['random', 'start', 'end', 'certain', 'uncertain']
         create_gen=False,
         create_real=True
@@ -93,7 +93,7 @@ for val_idx in tqdm(range(len(data_files))):
 for exponent in [5,7,10]:
     for unmasking_order in ['random', 'start', 'end', 'certain', 'uncertain']:
         print('creating gen', subfolder, exponent, unmasking_order)
-        midi_folder = 'MIDIs/' + subfolder + '/' + curriculum_type + str(exponent)
+        midi_folder = base_folder + subfolder + '/' + curriculum_type + str(exponent)
         if nvis is not None:
             midi_folder += '_nvis' + str(nvis)
         midi_folder += '_' + unmasking_order + '/'
@@ -101,7 +101,7 @@ for exponent in [5,7,10]:
 
         for val_idx in tqdm(range(len(data_files))):
             input_f = data_files[val_idx]
-            gen_harm, real_harm, gen_score, real_score, avg_diffs = generate_files_with_beam(
+            gen_harm, real_harm, gen_score, real_score = generate_files_with_nucleus(
                 model=model,
                 tokenizer=tokenizer,
                 input_f=input_f,
@@ -111,10 +111,26 @@ for exponent in [5,7,10]:
                 intertwine_bar_info=True,
                 normalize_tonality=False,
                 use_constraints=False,
-                temperature=1.0,
-                beam_size=5,
-                top_k=50,
+                temperature=0.5,
+                p=0.9,
                 unmasking_order=unmasking_order, # in ['random', 'start', 'end', 'certain', 'uncertain']
                 create_gen=True,
                 create_real=False
             )
+            # gen_harm, real_harm, gen_score, real_score, avg_diffs = generate_files_with_beam(
+            #     model=model,
+            #     tokenizer=tokenizer,
+            #     input_f=input_f,
+            #     mxl_folder=None,
+            #     midi_folder=midi_folder,
+            #     name_suffix=str(val_idx),
+            #     intertwine_bar_info=True,
+            #     normalize_tonality=False,
+            #     use_constraints=False,
+            #     temperature=1.0,
+            #     beam_size=5,
+            #     top_k=50,
+            #     unmasking_order=unmasking_order, # in ['random', 'start', 'end', 'certain', 'uncertain']
+            #     create_gen=True,
+            #     create_real=False
+            # )

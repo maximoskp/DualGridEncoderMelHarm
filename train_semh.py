@@ -138,8 +138,8 @@ def main():
     model = SingleGridMLMelHarm(
         chord_vocab_size=len(tokenizer.vocab),
         d_model=512,
-        nhead=4,
-        num_layers=4,
+        nhead=8,
+        num_layers=8,
         grid_length=80,
         pianoroll_dim=tokenizer.pianoroll_dim,
         device=device,

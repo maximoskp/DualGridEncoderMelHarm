@@ -138,9 +138,9 @@ def main():
     model = DualGridMLMMelHarm(
         chord_vocab_size=len(tokenizer.vocab),
         d_model=512,
-        nhead=4,
-        num_layers_mel=4,
-        num_layers_harm=4,
+        nhead=8,
+        num_layers_mel=8,
+        num_layers_harm=8,
         melody_length=80,
         harmony_length=80,
         pianoroll_dim=tokenizer.pianoroll_dim,
