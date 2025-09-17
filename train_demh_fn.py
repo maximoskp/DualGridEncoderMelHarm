@@ -44,7 +44,7 @@ def train_demh(
 
         # Count occurrences of chord tokens across dataset
         for item in dataset:
-            tokens = torch.tensor(item["input_ids"], dtype=torch.long)
+            tokens = torch.tensor(item["harmony_ids"], dtype=torch.long)
             tokens = tokens[tokens != ignore_index]  # filter padding/masked tokens
             counts += torch.bincount(tokens, minlength=num_classes).float()
 

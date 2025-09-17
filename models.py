@@ -378,3 +378,144 @@ class SingleGridMLMelHarm(nn.Module):
         return self_attns
     # end get_attention_maps
 # end class SingleGridMLMelHarm
+
+# Modular single encoder
+class SEModular(nn.Module):
+    def __init__(
+            self, 
+            chord_vocab_size,  # V
+            d_model=512, 
+            nhead=8, 
+            num_layers=8, 
+            dim_feedforward=2048,
+            pianoroll_dim=13,      # PCP + bars only
+            grid_length=80,
+            condition_dim=None,  # if not None, add a condition token of this dim at start
+            unmasking_stages=None,  # if not None, use stage-based unmasking
+            trainable_pos_emb=False,
+            dropout=0.3,
+            device='cpu'
+        ):
+        super().__init__()
+        self.device = device
+        self.d_model = d_model
+        self.grid_length = grid_length
+        self.condition_dim = condition_dim
+        self.unmasking_stages = unmasking_stages
+        self.trainable_pos_emb = trainable_pos_emb
+
+        # Melody projection: pianoroll_dim binary -> d_model
+        self.melody_proj = nn.Linear(pianoroll_dim, d_model, device=self.device)
+        # Harmony token embedding: V -> d_model
+        self.harmony_embedding = nn.Embedding(chord_vocab_size, d_model, device=self.device)
+
+        # If using condition token, a linear projection
+        if self.condition_dim is not None:
+            self.condition_proj = nn.Linear(condition_dim, d_model, device=self.device)
+            self.seq_len = 1 + grid_length + grid_length
+        else:
+            self.seq_len = grid_length + grid_length
+        
+        # Positional embeddings
+        if self.trainable_pos_emb:
+            self.full_pos = nn.Parameter(torch.zeros(1, self.seq_len, d_model, device=device))
+            nn.init.trunc_normal_(self.full_pos, std=0.02)
+        else:
+            # # Positional embeddings (separate for clarity)
+            self.shared_pos = sinusoidal_positional_encoding(
+                grid_length + (self.condition_dim is not None), d_model, device
+            )
+            self.full_pos = torch.cat([self.shared_pos[:, :(self.grid_length + (self.condition_dim is not None)), :],
+                              self.shared_pos[:, :self.grid_length, :]], dim=1)
+        
+        # If using unmasking stages, add an embedding layer
+        if self.unmasking_stages is not None:
+            assert isinstance(self.unmasking_stages, int) and self.unmasking_stages > 0, "unmasking_stages must be a positive integer"
+            self.stage_embedding_dim = 64
+            self.stage_embedding = nn.Embedding(self.unmasking_stages, self.stage_embedding_dim, device=self.device)
+            # New projection layer to go from (d_model + stage_embedding_dim) → d_model
+            self.stage_proj = nn.Linear(self.d_model + self.stage_embedding_dim, self.d_model, device=self.device)
+        
+        # Dropout
+        self.dropout = nn.Dropout(dropout)
+        # Transformer Encoder
+        encoder_layer = TransformerEncoderLayerWithAttn(d_model=d_model, 
+                                                   nhead=nhead, 
+                                                   dim_feedforward=dim_feedforward,
+                                                   dropout=dropout,
+                                                   activation='gelu',
+                                                   batch_first=True)
+        self.encoder = nn.TransformerEncoder(
+                        encoder_layer,
+                        num_layers=num_layers)
+        # Optional: output head for harmonies
+        self.output_head = nn.Linear(d_model, chord_vocab_size, device=self.device)
+        # Layer norm at input and output
+        self.input_norm = nn.LayerNorm(d_model)
+        self.output_norm = nn.LayerNorm(d_model)
+        self.to(device)
+    # end init
+
+    def forward(self, melody_grid, harmony_tokens=None, conditioning_vec=None, stage_indices=None):
+        """
+        melody_grid: (B, grid_length, pianoroll_dim)
+        harmony_tokens: (B, grid_length) - optional for training or inference
+        """
+        B = melody_grid.size(0)
+        device = self.device
+
+        # Project melody: (B, grid_length, pianoroll_dim) → (B, grid_length, d_model)
+        melody_emb = self.melody_proj(melody_grid)
+
+        # Harmony token embedding (optional for training): (B, grid_length) → (B, grid_length, d_model)
+        if harmony_tokens is not None:
+            harmony_emb = self.harmony_embedding(harmony_tokens)
+        else:
+            # Placeholder (zeros) if not provided
+            harmony_emb = torch.zeros(B, self.grid_length, self.d_model, device=device)
+
+        # Concatenate full input: (B, 1 + grid_length + grid_length, d_model)
+        full_seq = torch.cat([melody_emb, harmony_emb], dim=1)
+        if conditioning_vec is not None and self.condition_dim is not None:
+            # Project condition: (B, d_model) → (B, 1, d_model)
+            cond_emb = self.condition_proj(conditioning_vec).unsqueeze(1)
+            full_seq = torch.cat([cond_emb, full_seq], dim=1)
+
+        # Add positional encoding
+        full_seq = full_seq + self.full_pos
+
+        if self.unmasking_stages is not None:
+            # add stage embedding to harmony part
+            stage_emb = self.stage_embedding(stage_indices)  # (B, stage_embedding_dim)
+            stage_emb = stage_emb.unsqueeze(1).repeat(1, self.seq_len, 1)  # (B, seq_len, stage_embedding_dim)
+            # Concatenate along the feature dimension
+            full_seq = torch.cat([full_seq, stage_emb], dim=-1)  # (B, seq_len, d_model + stage_embedding_dim)
+            # Project back to d_model
+            full_seq = self.stage_proj(full_seq)  # (B, seq_len, d_model)
+
+        full_seq = self.input_norm(full_seq)
+        full_seq = self.dropout(full_seq)
+
+        # Transformer encode
+        encoded = self.encoder(full_seq)
+        encoded = self.output_norm(encoded)
+
+        # Optionally decode harmony logits (only last grid_length tokens)
+        harmony_output = self.output_head(encoded[:, -self.grid_length:, :])  # (B, grid_length, V)
+
+        return harmony_output
+    # end forward
+
+    # optionally add helpers to extract attention maps across layers:
+    def get_attention_maps(self):
+        """
+        Returns lists of per-layer attention tensors for self and cross attentions.
+            self_attns = [layer.last_self_attn, ...]
+        Each element can be None (if not computed) or a tensor (B, nhead, Lh, Lh)/(B, nhead, Lh, Lm).
+        """
+        self_attns = []
+        for layer in self.encoder.layers:
+            self_attns.append(layer.last_attn_weights)
+        return self_attns
+    # end get_attention_maps
+# end class SEModular

@@ -272,8 +272,8 @@ class CSGridMLMTokenizer(PreTrainedTokenizer):
         ids = []
         for file_path in tqdm(corpus, desc="Processing Files"):
             encoded = self.encode(file_path, add_start_harmony_token=add_start_harmony_token)
-            harmony_tokens = encoded['input_tokens']
-            harmony_ids = encoded['input_ids']
+            harmony_tokens = encoded['harmony_tokens']
+            harmony_ids = encoded['harmony_ids']
             tokens.append(harmony_tokens)
             ids.append(harmony_ids)
         return {'tokens': tokens, 'ids': ids}
@@ -721,8 +721,8 @@ class CSGridMLMTokenizer(PreTrainedTokenizer):
         h_complexity, c_cat = self.compute_harmonic_complexity(chord_tokens)
 
         return {
-            'input_tokens': chord_tokens,
-            'input_ids': chord_token_ids,
+            'harmony_tokens': chord_tokens,
+            'harmony_ids': chord_token_ids,
             'pianoroll': full_pianoroll,
             'time_signature': ts_num_list + ts_den_list,
             'attention_mask': attention_mask,
@@ -954,8 +954,8 @@ class CSGridMLMTokenizer(PreTrainedTokenizer):
         h_complexity, c_cat = self.compute_harmonic_complexity(chord_tokens)
 
         return {
-            'input_tokens': chord_tokens,
-            'input_ids': chord_token_ids,
+            'harmony_tokens': chord_tokens,
+            'harmony_ids': chord_token_ids,
             'pianoroll': full_pianoroll,
             'time_signature': ts_num_list + ts_den_list,
             'attention_mask': attention_mask,

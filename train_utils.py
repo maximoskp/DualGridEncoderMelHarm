@@ -395,8 +395,8 @@ def apply_focal_sharpness(
     return attenuated_grid
 # end apply_focal_sharpness
 
-def validation_loop(model, valloader, mask_token_id, bar_token_id, num_visible, \
-                    loss_fn, epoch, step, \
+def validation_loop(curriculum_type, model, valloader, mask_token_id, bar_token_id, \
+                    num_visible, condition_dim, total_stages, loss_fn, epoch, step, \
                     train_loss, train_accuracy, \
                     train_perplexity, train_token_entropy,
                     best_val_loss, saving_version, results_path=None, transformer_path=None, tqdm_position=0):
@@ -418,21 +418,37 @@ def validation_loop(model, valloader, mask_token_id, bar_token_id, num_visible, 
             for batch in tepoch:
                 perplexity_metric.reset()
                 melody_grid = batch["pianoroll"].to(device)           # (B, 256, 140)
-                harmony_gt = batch["input_ids"].to(device)         # (B, 256)
+                harmony_gt = batch["harmony_ids"].to(device)         # (B, 256)
+                if condition_dim is not None:
+                    conditioning_vec = batch["time_signature"].to(device)  # (B, condDim)
+                else:
+                    conditioning_vec = None
                 
                 # Apply masking to harmony
-                rets = full_to_partial_masking(
-                    harmony_gt,
-                    mask_token_id,
-                    num_visible,
-                    bar_token_id=bar_token_id
-                )
-                harmony_input, harmony_target = rets[0], rets[1]
-
+                if curriculum_type == 'f2f':
+                    harmony_input, harmony_target = full_to_partial_masking(
+                        harmony_gt,
+                        mask_token_id,
+                        num_visible,
+                        bar_token_id=bar_token_id
+                    )
+                    stage_indices = None
+                else:
+                    # Apply masking to harmony
+                    harmony_input, harmony_target, stage_indices = apply_masking(
+                        harmony_gt,
+                        mask_token_id,
+                        total_stages=total_stages,
+                        curriculum_type=curriculum_type
+                    )
+                    num_visible = -1
+                
                 # Forward pass
                 logits = model(
-                    melody_grid,
-                    harmony_input
+                    melody_grid.to(device),
+                    harmony_input.to(device),
+                    conditioning_vec,
+                    stage_indices
                 )
 
                 # Compute loss only on masked tokens
@@ -461,12 +477,12 @@ def validation_loop(model, valloader, mask_token_id, bar_token_id, num_visible, 
             # end for batch
     # end with tqdm
     if transformer_path is not None:
-        if  True: # best_val_loss > val_loss:
+        if  (curriculum_type == 'f2f') or (best_val_loss > val_loss):
             print('saving!')
             saving_version += 1
             best_val_loss = val_loss
             torch.save(model.state_dict(), transformer_path)
-        if num_visible in [0, 5, 15, 30, 31, 50, 51]:
+        if (curriculum_type == 'f2f') and (num_visible in [0, 5, 15, 30, 31, 50, 51]):
             # save intermediate models at key points
             torch.save(model.state_dict(), transformer_path[:-3] + f'_nvis{num_visible}.pt')
     print(f'validation: accuracy={val_accuracy}, loss={val_loss}')
@@ -484,8 +500,11 @@ def validation_loop(model, valloader, mask_token_id, bar_token_id, num_visible, 
 
 def train_with_curriculum(
     model, optimizer, trainloader, valloader, loss_fn, mask_token_id,
+    curriculum_type='random',
     epochs=100,
+    condition_dim=None,
     exponent=5,
+    total_stages=10,
     results_path=None,
     transformer_path=None,
     bar_token_id=None,
@@ -532,24 +551,40 @@ def train_with_curriculum(
                 perplexity_metric.reset()
                 model.train()
                 melody_grid = batch["pianoroll"].to(device)    # (B, L, prDim)
-                harmony_gt = batch["input_ids"].to(device)     # (B, L)
+                harmony_gt = batch["harmony_ids"].to(device)     # (B, L)
+                if condition_dim is not None:
+                    conditioning_vec = batch["time_signature"].to(device)  # (B, condDim)
+                else:
+                    conditioning_vec = None
 
                 # Apply masking to harmony
-                percent_visible = min(1.0, (step+1)/total_steps)**exponent  # 5th power goes around half way near zero
-                L = harmony_gt.shape[1]
-                num_visible = min( int(L * percent_visible), L-1 )  # ensure at least one token is predicted
-                rets = full_to_partial_masking(
-                    harmony_gt,
-                    mask_token_id,
-                    num_visible,
-                    bar_token_id=bar_token_id
-                )
-                harmony_input, harmony_target = rets[0], rets[1]
+                if curriculum_type == 'f2f':
+                    percent_visible = min(1.0, (step+1)/total_steps)**exponent  # 5th power goes around half way near zero
+                    L = harmony_gt.shape[1]
+                    num_visible = min( int(L * percent_visible), L-1 )  # ensure at least one token is predicted
+                    harmony_input, harmony_target = full_to_partial_masking(
+                        harmony_gt,
+                        mask_token_id,
+                        num_visible,
+                        bar_token_id=bar_token_id
+                    )
+                    stage_indices = None
+                else:
+                    # Apply masking to harmony
+                    harmony_input, harmony_target, stage_indices = apply_masking(
+                        harmony_gt,
+                        mask_token_id,
+                        total_stages=total_stages,
+                        curriculum_type=curriculum_type
+                    )
+                    num_visible = -1
                 
                 # Forward pass
                 logits = model(
                     melody_grid.to(device),
                     harmony_input.to(device),
+                    conditioning_vec,
+                    stage_indices
                 )
 
                 # Compute loss only on masked tokens
@@ -582,11 +617,14 @@ def train_with_curriculum(
                 step += 1
                 if step%(total_steps//(epochs*validations_per_epoch)) == 0 or step == total_steps:
                     best_val_loss, saving_version = validation_loop(
+                        curriculum_type,
                         model,
                         valloader,
                         mask_token_id,
                         bar_token_id,
                         num_visible,
+                        condition_dim,
+                        total_stages,
                         loss_fn,
                         epoch,
                         step,

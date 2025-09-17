@@ -170,7 +170,7 @@ class CSGridMLMDataset(Dataset):
         if self.frontloading:
             # check if file exists and load it
             root_dir = root_dir[:-1] if root_dir[-1] == '/' else root_dir
-            frontloaded_file = root_dir + '_' + name_suffix + '_' + '.pickle'
+            frontloaded_file = root_dir + '_' + name_suffix + '.pickle'
             if refrontload or not os.path.isfile(frontloaded_file):
                 print('Frontloading data.')
                 self.encoded = []
@@ -203,7 +203,7 @@ class CSGridMLMDataset(Dataset):
             data_file = self.data_files[idx]
             encoded = self.tokenizer.encode( data_file )
         return {
-            'input_ids': encoded['input_ids'],
+            'harmony_ids': encoded['harmony_ids'],
             'attention_mask': encoded['attention_mask'],
             'pianoroll': encoded['pianoroll'],
             'time_signature': encoded['time_signature'],
@@ -216,20 +216,20 @@ def CSGridMLM_collate_fn(batch):
     """
     batch: list of dataset items, each one like:
         {
-            'input_ids': List[int],
+            'harmony_ids': List[int],
             'attention_mask': List[int],
             'time_sig': List[int],
             'pianoroll': np.ndarray of shape (140, fixed_length)
         }
     """
-    input_ids = [torch.tensor(item['input_ids'], dtype=torch.long) for item in batch]
+    harmony_ids = [torch.tensor(item['harmony_ids'], dtype=torch.long) for item in batch]
     attention_mask = [torch.tensor(item['attention_mask'], dtype=torch.long) for item in batch]
     time_signature = [torch.tensor(item['time_signature'], dtype=torch.float) for item in batch]
     h_density_complexity = [torch.tensor(item['h_density_complexity'], dtype=torch.float) for item in batch]
     pianorolls = [torch.tensor(item['pianoroll'], dtype=torch.float) for item in batch]
 
     return {
-        'input_ids': torch.stack(input_ids),  # shape: (B, L)
+        'harmony_ids': torch.stack(harmony_ids),  # shape: (B, L)
         'attention_mask': torch.stack(attention_mask),  # shape: (B, L)
         'time_signature': torch.stack(time_signature),  # shape: (B, whatever dim)
         'h_density_complexity': torch.stack(h_density_complexity),  # shape: (B, whatever dim)

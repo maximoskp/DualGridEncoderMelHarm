@@ -1042,8 +1042,10 @@ def compute_and_save_html_results_by_setup(
 
 
 if __name__ == "__main__":
-    ground_truth_path = "./MIDIs/real"          # folder with the ground-truth MIDIs
-    root_folder       = "./MIDIs/DE"   # folder containing setups; each setup has instance folders
+    # ground_truth_path = "./MIDIs/real"          # folder with the ground-truth MIDIs
+    # root_folder       = "./MIDIs/DE"   # folder containing setups; each setup has instance folders
+    ground_truth_path = "./MIDIs_nucleus_t05_p09/real"          # folder with the ground-truth MIDIs
+    root_folder       = "./MIDIs_nucleus_t05_p09/DE"   # folder containing setups; each setup has instance folders
 
     compute_and_save_html_results_by_setup(
         root_folder=root_folder,
@@ -1051,11 +1053,11 @@ if __name__ == "__main__":
         chord_track_index=1,
         melody_track_index=0,
         grouping_threshold=0.05,
-        output_html="results_DE.html"
+        output_html="results/results_DE_nuc.html"
     )
 
-    ground_truth_path = "./MIDIs/real"          # folder with the ground-truth MIDIs
-    root_folder       = "./MIDIs/SE"   # folder containing setups; each setup has instance folders
+    ground_truth_path = "./MIDIs_nucleus_t05_p09/real"          # folder with the ground-truth MIDIs
+    root_folder       = "./MIDIs_nucleus_t05_p09/SE"   # folder containing setups; each setup has instance folders
 
     compute_and_save_html_results_by_setup(
         root_folder=root_folder,
@@ -1063,5 +1065,5 @@ if __name__ == "__main__":
         chord_track_index=1,
         melody_track_index=0,
         grouping_threshold=0.05,
-        output_html="results_SE.html"
+        output_html="results/results_SE_nuc.html"
     )
