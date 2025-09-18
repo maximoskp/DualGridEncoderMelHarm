@@ -5,7 +5,7 @@ from music21 import harmony, stream, metadata, chord, note, key, meter, tempo, d
 import mir_eval
 import numpy as np
 from copy import deepcopy
-from models import DualGridMLMMelHarm, SingleGridMLMelHarm
+from models import DualGridMLMMelHarm, SingleGridMLMelHarm, SEModular
 import os
 from music_utils import transpose_score
 
@@ -786,6 +786,52 @@ def load_SE_model(
     model.to(device)
     return model
 # end load_SE_model
+
+def load_SE_Modular(
+    d_model=512, 
+    nhead=4, 
+    num_layers=4,
+    curriculum_type='f2f',
+    subfolder=None,
+    device_name='cuda:0',
+    tokenizer=None,
+    grid_length=80,
+    nvis=None,
+    condition_dim=None,  # if not None, add a condition token of this dim at start
+    unmasking_stages=None,  # if not None, use stage-based unmasking
+    trainable_pos_emb=False,
+):
+    if device_name == 'cpu':
+        device = torch.device('cpu')
+    else:
+        if torch.cuda.is_available():
+            device = torch.device(device_name)
+        else:
+            print('Selected device not available: ' + device_name)
+            device = torch.device('cpu')
+    model = SEModular(
+        chord_vocab_size=len(tokenizer.vocab),
+        d_model=d_model,
+        nhead=nhead,
+        num_layers=num_layers,
+        device=device,
+        grid_length=grid_length,
+        pianoroll_dim=tokenizer.pianoroll_dim,
+        condition_dim=condition_dim,  # if not None, add a condition token of this dim at start
+        unmasking_stages=unmasking_stages,  # if not None, use stage-based unmasking
+        trainable_pos_emb=trainable_pos_emb
+    )
+    model_path = 'saved_models/SE/' + subfolder + '/' + curriculum_type
+    if nvis is not None:
+        model_path += '_nvis' + str(nvis)
+    model_path += '.pt'
+    # checkpoint = torch.load(model_path, map_location=device_name, weights_only=True)
+    checkpoint = torch.load(model_path, map_location=device_name)
+    model.load_state_dict(checkpoint)
+    model.eval()
+    model.to(device)
+    return model
+# end load_SE_Modular
 
 def generate_files_with_base2(
         model,
