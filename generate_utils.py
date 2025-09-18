@@ -790,8 +790,8 @@ def load_SE_model(
 
 def load_SE_Modular(
     d_model=512, 
-    nhead=4, 
-    num_layers=4,
+    nhead=8, 
+    num_layers=8,
     curriculum_type='f2f',
     subfolder=None,
     device_name='cuda:0',
@@ -826,6 +826,7 @@ def load_SE_Modular(
     if nvis is not None:
         model_path += '_nvis' + str(nvis)
     model_path += '.pt'
+    print('model_path: ',model_path)
     # checkpoint = torch.load(model_path, map_location=device_name, weights_only=True)
     checkpoint = torch.load(model_path, map_location=device_name)
     model.load_state_dict(checkpoint)
