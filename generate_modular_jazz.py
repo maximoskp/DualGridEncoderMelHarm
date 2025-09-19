@@ -32,7 +32,7 @@ def main():
     intertwine_bar_info = 'bar' in subfolder
 
     device_name = 'cuda:0'
-    base_folder = 'MIDIs/testset/'
+    base_folder = 'MIDIs_jazz/testsuper/jazz/'
 
     tokenizer = CSGridMLMTokenizer(
         fixed_length=grid_lenght,
@@ -43,7 +43,7 @@ def main():
         use_full_range_melody='FR' in subfolder
     )
 
-    val_dir = '/media/maindisk/data/hooktheory_midi_hr/CA_test'
+    val_dir = '/media/maindisk/data/gjt_melodies/gjt_CA'
 
     unmasking_order = 'start' # in ['random', 'start', 'end', 'certain', 'uncertain']
 

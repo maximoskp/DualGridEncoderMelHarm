@@ -47,6 +47,8 @@ def random_progressive_generate(
     mask_token_id,          # token ID used for masking
     temperature=1.0,        # optional temperature for sampling
     strategy='topk',        # 'topk' or 'sample' strategy for selecting new tokens
+    token_strategy='argmax',# 'argmax' or 'nucleus' for token filling
+    nucleus_p=0.9,          # p for nucleus sampling
     pad_token_id=None,      # token ID for <pad>
     nc_token_id=None,       # token ID for <nc>
     force_fill=True,        # disallow <pad>/<nc> before melody ends
@@ -113,9 +115,26 @@ def random_progressive_generate(
         else:
             raise ValueError(f"Unsupported strategy: {strategy}")
 
-        # Update visible_harmony with selected predictions
+        # --- fill tokens at selected positions ---
         for idx in selected_positions:
-            visible_harmony[0, idx] = predictions[0, idx]
+            if token_strategy == 'argmax':
+                # greedy: just pick max prob token
+                visible_harmony[0, idx] = predictions[0, idx]
+            elif token_strategy == 'nucleus':
+                # nucleus sampling at this position
+                probs_pos = probs[0, idx]
+                sorted_probs, sorted_idx = torch.sort(probs_pos, descending=True)
+                cumulative = torch.cumsum(sorted_probs, dim=-1)
+                nucleus_mask = cumulative <= nucleus_p
+                nucleus_mask[0] = True  # always keep top-1
+                nucleus_probs = sorted_probs[nucleus_mask]
+                nucleus_idx = sorted_idx[nucleus_mask]
+
+                nucleus_probs = nucleus_probs / nucleus_probs.sum()
+                sampled = torch.multinomial(nucleus_probs, 1).item()
+                visible_harmony[0, idx] = nucleus_idx[sampled].item()
+            else:
+                raise ValueError(f"Unsupported token_strategy: {token_strategy}")
 
     return visible_harmony  # Final generated token sequence
 # end random_progressive_generate
@@ -484,7 +503,8 @@ def structured_progressive_generate(
     num_stages,             # e.g., 9 for 256 tokens
     mask_token_id,          # token ID used for masking
     temperature=1.0,        # optional temperature for sampling
-    strategy='topk',        # 'topk' or 'sample'
+    strategy='topk',        # 'topk' or 'sample' or 'nucleus'
+    nucleus_p=0.9,          # cutoff probability for nucleus sampling
     pad_token_id=None,      # token ID for <pad>
     nc_token_id=None,       # token ID for <nc>
     force_fill=True,        # disallow <pad>/<nc> before melody ends,
@@ -548,6 +568,24 @@ def structured_progressive_generate(
             for pos in positions_to_predict:
                 prob_dist = probs[0, pos]
                 sampled_token = torch.multinomial(prob_dist, num_samples=1)
+                visible_harmony[0, pos] = sampled_token
+        elif strategy == 'nucleus':
+            for pos in positions_to_predict:
+                prob_dist = probs[0, pos]
+                sorted_probs, sorted_idx = torch.sort(prob_dist, descending=True)
+                cumulative_probs = torch.cumsum(sorted_probs, dim=0)
+
+                # keep only tokens up to nucleus_p mass
+                cutoff = cumulative_probs > nucleus_p
+                if cutoff.any():
+                    cutoff_index = cutoff.nonzero(as_tuple=True)[0][0].item()
+                    sorted_probs = sorted_probs[:cutoff_index+1]
+                    sorted_idx = sorted_idx[:cutoff_index+1]
+
+                # normalize
+                sorted_probs = sorted_probs / sorted_probs.sum()
+
+                sampled_token = sorted_idx[torch.multinomial(sorted_probs, num_samples=1)]
                 visible_harmony[0, pos] = sampled_token
         else:
             raise ValueError(f"Unsupported strategy: {strategy}")
@@ -866,7 +904,8 @@ def generate_files_with_base2(
             num_stages=10,
             mask_token_id=tokenizer.mask_token_id,
             temperature=temperature,
-            strategy='sample',
+            strategy='nucleus',
+            nucleus_p=0.9,
             pad_token_id=pad_token_id,      # token ID for <pad>
             nc_token_id=nc_token_id,       # token ID for <nc>
             force_fill=True,         # disallow <pad>/<nc> before melody ends
@@ -951,7 +990,9 @@ def generate_files_with_random(
             num_stages=num_stages,
             mask_token_id=tokenizer.mask_token_id,
             temperature=temperature,
-            strategy='sample',
+            strategy='topk',
+            token_strategy='nucleus',
+            nucleus_p=0.9,
             pad_token_id=pad_token_id,      # token ID for <pad>
             nc_token_id=nc_token_id,       # token ID for <nc>
             force_fill=True,         # disallow <pad>/<nc> before melody ends

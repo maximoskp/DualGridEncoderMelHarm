@@ -1042,10 +1042,10 @@ def compute_and_save_html_results_by_setup(
 
 
 if __name__ == "__main__":
-    # ground_truth_path = "./MIDIs/real"          # folder with the ground-truth MIDIs
-    # root_folder       = "./MIDIs/DE"   # folder containing setups; each setup has instance folders
     ground_truth_path = "./MIDIs_nucleus_t05_p09/real"          # folder with the ground-truth MIDIs
-    root_folder       = "./MIDIs/testset"   # folder containing setups; each setup has instance folders
+    root_folder       = "./MIDIs/testsuper"   # folder containing setups; each setup has instance folders
+    # ground_truth_path = "./MIDIs_jazz/real"          # folder with the ground-truth MIDIs
+    # root_folder       = "./MIDIs_jazz/testsuper"   # folder containing setups; each setup has instance folders
 
     compute_and_save_html_results_by_setup(
         root_folder=root_folder,
@@ -1053,7 +1053,8 @@ if __name__ == "__main__":
         chord_track_index=1,
         melody_track_index=0,
         grouping_threshold=0.05,
-        output_html="results/results_DE_all.html"
+        output_html="results/results_SE_vs_basic.html"
+        # output_html="results/results_SE_vs_basic_jazz.html"
     )
 
     # ground_truth_path = "./MIDIs_nucleus_t05_p09/real"          # folder with the ground-truth MIDIs

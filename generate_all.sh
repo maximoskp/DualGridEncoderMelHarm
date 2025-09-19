@@ -9,13 +9,20 @@
 #
 # f2f Q4 bar PC only. 6) Is the much simpler setup equally good better (no stage, not trainable pos_emb, curriculum that starts with cross attention)?
 scripts=(
-    "generate_modular_test.py -c base2 -f Q16_L256_PC_FR"
-    "generate_modular_test.py -c base2 -f Q16_L320_bar_PC_FR"
-    "generate_modular_test.py -c base2 -f Q4_L64_PC_FR"
-    "generate_modular_test.py -c base2 -f Q4_L80_bar_PC_FR"
-    "generate_modular_test.py -c random -f Q4_L80_bar_PC"
-    "generate_modular_test.py -c base2 -f Q4_L80_bar_PC"
-    "generate_modular_test.py -c f2f -f Q4_L80_bar_PC"
+    # "generate_modular_test.py -c base2 -f Q16_L256_PC_FR"
+    # "generate_modular_test.py -c base2 -f Q16_L320_bar_PC_FR"
+    # "generate_modular_test.py -c base2 -f Q4_L64_PC_FR"
+    # "generate_modular_test.py -c base2 -f Q4_L80_bar_PC_FR"
+    # "generate_modular_test.py -c random -f Q4_L80_bar_PC"
+    # "generate_modular_test.py -c base2 -f Q4_L80_bar_PC"
+    # "generate_modular_test.py -c f2f -f Q4_L80_bar_PC"
+    "generate_modular_jazz.py -c base2 -f Q16_L256_PC_FR"
+    "generate_modular_jazz.py -c base2 -f Q16_L320_bar_PC_FR"
+    "generate_modular_jazz.py -c base2 -f Q4_L64_PC_FR"
+    "generate_modular_jazz.py -c base2 -f Q4_L80_bar_PC_FR"
+    "generate_modular_jazz.py -c random -f Q4_L80_bar_PC"
+    "generate_modular_jazz.py -c base2 -f Q4_L80_bar_PC"
+    "generate_modular_jazz.py -c f2f -f Q4_L80_bar_PC"
 )
 
 # Name of the conda environment
