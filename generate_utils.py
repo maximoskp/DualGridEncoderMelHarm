@@ -73,17 +73,23 @@ def random_progressive_generate(
             last_active_index = -1
     else:
         last_active_index = -1  # Don't clamp anything if not forced
-    for stage in range(num_stages):
-        # Check for early stopping
-        if not (visible_harmony == mask_token_id).any():
-            break  # All tokens revealed
+    while (visible_harmony == mask_token_id).any():
         with torch.no_grad():
-            logits = model(
-                melody_grid=melody_grid.to(model.device),
-                conditioning_vec=conditioning_vec.to(model.device),
-                harmony_tokens=visible_harmony.to(model.device),
-                stage_indices=torch.LongTensor([stage]).to(model.device)
-            )  # (1, seq_len, vocab_size)
+            if conditioning_vec is None or num_stages is None:
+                logits = model(
+                    melody_grid=melody_grid.to(model.device),
+                    harmony_tokens=visible_harmony.to(model.device),
+                )  # (1, seq_len, vocab_size)
+            else:
+                stage = int(
+                    ((visible_harmony == mask_token_id).sum().item()/visible_harmony.size()[0])*num_stages
+                    )
+                logits = model(
+                    melody_grid=melody_grid.to(model.device),
+                    conditioning_vec=conditioning_vec.to(model.device),
+                    harmony_tokens=visible_harmony.to(model.device),
+                    stage_indices=torch.LongTensor([stage]).to(model.device)
+                )  # (1, seq_len, vocab_size)
         
         if force_fill and (pad_token_id is not None and nc_token_id is not None):
             for i in range(seq_len):
@@ -392,32 +398,29 @@ def beam_token_by_token_generate(
     return best_harmony, best_avg_diffs
 # end beam_token_by_token_generate
 
-import torch
-
 def nucleus_token_by_token_generate(
         model,
         melody_grid,            # (1, seq_len, input_dim)
         mask_token_id,          # token ID used for masking
-        bar_token_id,           # token ID for bar markers
         temperature=1.0,        # optional softmax temperature
         pad_token_id=None,      # token ID for <pad>
         nc_token_id=None,       # token ID for <nc>
         force_fill=True,        # disallow <pad>/<nc> before melody ends
         chord_constraints=None, # chord + bar constraints
         p=0.9,                  # nucleus threshold
-        unmasking_order='random' # in ['random', 'start', 'end', 'certain', 'uncertain']
+        unmasking_order='random', # in ['random', 'start', 'end', 'certain', 'uncertain']
+        num_stages=None,
+        conditioning_vec=None
     ):
     device = melody_grid.device
     seq_len = melody_grid.shape[1]
 
     # --- 1. Initialize ---
     visible_harmony = torch.full((1, seq_len), mask_token_id, dtype=torch.long, device=device)
-
     if chord_constraints is not None:
         idxs = torch.logical_and(chord_constraints != nc_token_id,
                                  chord_constraints != pad_token_id)
         visible_harmony[idxs] = chord_constraints[idxs]
-    
     # Compute last active melody index if forcing fill
     if force_fill:
         active = (melody_grid != 0).any(dim=-1).squeeze(0)  # shape: (seq_len,)
@@ -431,12 +434,21 @@ def nucleus_token_by_token_generate(
     step = 0
     while (visible_harmony == mask_token_id).any():
         with torch.no_grad():
-            logits = model(
-                melody_grid=melody_grid.to(model.device),
-                harmony_tokens=visible_harmony.to(model.device),
-
-            )  # (1, seq_len, vocab_size)
-
+            if conditioning_vec is None or num_stages is None:
+                logits = model(
+                    melody_grid=melody_grid.to(model.device),
+                    harmony_tokens=visible_harmony.to(model.device),
+                )  # (1, seq_len, vocab_size)
+            else:
+                stage = int(
+                    ((visible_harmony != mask_token_id).sum().item()/visible_harmony.size().numel())*num_stages
+                )
+                logits = model(
+                    melody_grid=melody_grid.to(model.device),
+                    conditioning_vec=conditioning_vec.to(model.device),
+                    harmony_tokens=visible_harmony.to(model.device),
+                    stage_indices=torch.LongTensor([stage]).to(model.device)
+                )  # (1, seq_len, vocab_size)
         # --- Masked position selection ---
         masked_positions = (visible_harmony == mask_token_id).squeeze(0).nonzero(as_tuple=True)[0]
         if masked_positions.numel() == 0:
@@ -492,7 +504,7 @@ def nucleus_token_by_token_generate(
         # update harmony
         visible_harmony[0, pos] = token
         step += 1
-
+    
     return visible_harmony
 # end nucleus_token_by_token_generate
 
@@ -528,12 +540,13 @@ def structured_progressive_generate(
             last_active_index = -1
     else:
         last_active_index = -1  # Don't clamp anything if not forced
-    for stage in range(num_stages):
+    computed_stages = int(np.ceil(np.log2( seq_len )))
+    for stage in range(computed_stages):
         # Check for early stopping
         if not (visible_harmony == mask_token_id).any():
             break  # All tokens revealed
 
-        spacing_target = max(1, 2 ** (num_stages - stage - 1))  # e.g., 256 → 128 → ... → 1
+        spacing_target = max(1, 2 ** (computed_stages - stage - 1))  # e.g., 256 → 128 → ... → 1
         candidate_positions = torch.arange(0, seq_len, spacing_target, device=device)
         masked_positions = (visible_harmony[0] == mask_token_id).nonzero(as_tuple=True)[0]
         positions_to_predict = [pos for pos in candidate_positions if pos in masked_positions]
@@ -542,12 +555,18 @@ def structured_progressive_generate(
             continue  # Nothing to predict at this stage
 
         with torch.no_grad():
-            logits = model(
-                melody_grid=melody_grid.to(model.device),
-                conditioning_vec=conditioning_vec.to(model.device),
-                harmony_tokens=visible_harmony.to(model.device),
-                stage_indices=torch.LongTensor([stage]).to(model.device)
-            )  # (1, seq_len, vocab_size)
+            if conditioning_vec is not None:
+                logits = model(
+                    melody_grid=melody_grid.to(model.device),
+                    conditioning_vec=conditioning_vec.to(model.device),
+                    harmony_tokens=visible_harmony.to(model.device),
+                    stage_indices=torch.LongTensor([stage]).to(model.device)
+                )  # (1, seq_len, vocab_size)
+            else:
+                logits = model(
+                    melody_grid=melody_grid.to(model.device),
+                    harmony_tokens=visible_harmony.to(model.device),
+                )  # (1, seq_len, vocab_size)
 
         if force_fill and (pad_token_id is not None and nc_token_id is not None):
             for i in range(seq_len):
@@ -881,9 +900,13 @@ def generate_files_with_base2(
         midi_folder,
         name_suffix,
         use_constraints=False,
+        intertwine_bar_info=False, # no bar default
         normalize_tonality=False,
-        num_stages=10,
         temperature=1.0,
+        p=0.9,
+        unmasking_order='None', # just for having a homogenized format
+        num_stages=10,
+        use_conditions=False,
         create_gen=True,
         create_real=False
     ):
@@ -893,23 +916,32 @@ def generate_files_with_base2(
     input_encoded = tokenizer.encode( input_f, keep_durations=True, normalize_tonality=normalize_tonality )
 
     harmony_real = torch.LongTensor(input_encoded['harmony_ids']).reshape(1, len(input_encoded['harmony_ids']))
+    harmony_input = torch.LongTensor(input_encoded['harmony_ids']).reshape(1, len(input_encoded['harmony_ids']))
+    # if intertwine_bar_info is True and use_constraints is False, we only need to pass
+    # the bar information as a constraint, not the chords, or anything else
+    # so mask out everything except from bar_token_ids
+    if intertwine_bar_info and not use_constraints:
+        harmony_input[ harmony_input != tokenizer.bar_token_id ] = tokenizer.mask_token_id
     melody_grid = torch.FloatTensor( input_encoded['pianoroll'] ).reshape( 1, input_encoded['pianoroll'].shape[0], input_encoded['pianoroll'].shape[1] )
-    conditioning_vec = torch.FloatTensor( input_encoded['time_signature'] ).reshape( 1, len(input_encoded['time_signature']) )
+    if use_conditions:
+        conditioning_vec = torch.FloatTensor( input_encoded['time_signature'] ).reshape( 1, len(input_encoded['time_signature']) )
+    else:
+        conditioning_vec = None
 
     if create_gen:
         base2_generated_harmony = structured_progressive_generate(
             model=model,
             melody_grid=melody_grid.to(model.device),
-            conditioning_vec=conditioning_vec.to(model.device),
-            num_stages=10,
+            conditioning_vec=None if conditioning_vec is None else conditioning_vec.to(model.device),
+            num_stages=num_stages,
             mask_token_id=tokenizer.mask_token_id,
             temperature=temperature,
             strategy='nucleus',
-            nucleus_p=0.9,
+            nucleus_p=p,
             pad_token_id=pad_token_id,      # token ID for <pad>
             nc_token_id=nc_token_id,       # token ID for <nc>
             force_fill=True,         # disallow <pad>/<nc> before melody ends
-            chord_constraints = harmony_real.to(model.device) if use_constraints else None
+            chord_constraints = harmony_input.to(model.device) if use_constraints or intertwine_bar_info else None,
         )
         gen_output_tokens = []
         for t in base2_generated_harmony[0].tolist():
@@ -967,9 +999,13 @@ def generate_files_with_random(
         midi_folder,
         name_suffix,
         use_constraints=False,
+        intertwine_bar_info=False, # no bar default
         normalize_tonality=False,
-        num_stages=10,
         temperature=1.0,
+        p=0.9,
+        unmasking_order='None', # just for having a homogenized format
+        num_stages=10,
+        use_conditions=False,
         create_gen=True,
         create_real=False
     ):
@@ -979,24 +1015,33 @@ def generate_files_with_random(
     input_encoded = tokenizer.encode( input_f, keep_durations=True, normalize_tonality=normalize_tonality )
     
     harmony_real = torch.LongTensor(input_encoded['harmony_ids']).reshape(1, len(input_encoded['harmony_ids']))
+    harmony_input = torch.LongTensor(input_encoded['harmony_ids']).reshape(1, len(input_encoded['harmony_ids']))
+    # if intertwine_bar_info is True and use_constraints is False, we only need to pass
+    # the bar information as a constraint, not the chords, or anything else
+    # so mask out everything except from bar_token_ids
+    if intertwine_bar_info and not use_constraints:
+        harmony_input[ harmony_input != tokenizer.bar_token_id ] = tokenizer.mask_token_id
     melody_grid = torch.FloatTensor( input_encoded['pianoroll'] ).reshape( 1, input_encoded['pianoroll'].shape[0], input_encoded['pianoroll'].shape[1] )
-    conditioning_vec = torch.FloatTensor( input_encoded['time_signature'] ).reshape( 1, len(input_encoded['time_signature']) )
+    if use_conditions:
+        conditioning_vec = torch.FloatTensor( input_encoded['time_signature'] ).reshape( 1, len(input_encoded['time_signature']) )
+    else:
+        conditioning_vec = None
     
     if create_gen:
         random_generated_harmony = random_progressive_generate(
             model=model,
             melody_grid=melody_grid.to(model.device),
-            conditioning_vec=conditioning_vec.to(model.device),
+            conditioning_vec=None if conditioning_vec is None else conditioning_vec.to(model.device),
             num_stages=num_stages,
             mask_token_id=tokenizer.mask_token_id,
             temperature=temperature,
             strategy='topk',
             token_strategy='nucleus',
-            nucleus_p=0.9,
+            nucleus_p=p,
             pad_token_id=pad_token_id,      # token ID for <pad>
             nc_token_id=nc_token_id,       # token ID for <nc>
             force_fill=True,         # disallow <pad>/<nc> before melody ends
-            chord_constraints = harmony_real.to(model.device) if use_constraints else None
+            chord_constraints = harmony_input.to(model.device) if use_constraints or intertwine_bar_info else None,
         )
         gen_output_tokens = []
         for t in random_generated_harmony[0].tolist():
@@ -1257,6 +1302,8 @@ def generate_files_with_nucleus(
         temperature=1.0,
         p=0.9,
         unmasking_order='random',
+        num_stages=None,
+        use_conditions=False,
         create_gen=True,
         create_real=False
     ):
@@ -1282,12 +1329,16 @@ def generate_files_with_nucleus(
     if intertwine_bar_info and not use_constraints:
         harmony_input[ harmony_input != tokenizer.bar_token_id ] = tokenizer.mask_token_id
     melody_grid = torch.FloatTensor( input_encoded['pianoroll'] ).reshape( 1, input_encoded['pianoroll'].shape[0], input_encoded['pianoroll'].shape[1] )
+    if use_conditions:
+        conditioning_vec = torch.FloatTensor( input_encoded['time_signature'] ).reshape( 1, len(input_encoded['time_signature']) )
+    else:
+        conditioning_vec = None
+    
     if create_gen:
         random_generated_harmony = nucleus_token_by_token_generate(
             model=model,
             melody_grid=melody_grid.to(model.device),
             mask_token_id=tokenizer.mask_token_id,
-            bar_token_id=tokenizer.bar_token_id,
             temperature=temperature,
             pad_token_id=pad_token_id,      # token ID for <pad>
             nc_token_id=nc_token_id,       # token ID for <nc>
@@ -1295,6 +1346,8 @@ def generate_files_with_nucleus(
             chord_constraints = harmony_input.to(model.device) if use_constraints or intertwine_bar_info else None,
             p=p,
             unmasking_order=unmasking_order,
+            num_stages=num_stages,
+            conditioning_vec=conditioning_vec
         )
         gen_output_tokens = []
         for t in random_generated_harmony[0].tolist():

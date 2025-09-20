@@ -13,6 +13,7 @@ def main():
     # Define arguments
     parser.add_argument('-c', '--curriculum', type=str, help='Specify the curriculum type name among: ' + repr(curriculum_types), required=True)
     parser.add_argument('-f', '--subfolder', type=str, help='Specify subfolder to save the model and results. This name also defines tokenizer and token setup.', required=True)
+    parser.add_argument('-g', '--generation', type=str, help='Specify generation function.', required=True)
 
     # Parse the arguments
     args = parser.parse_args()
@@ -20,8 +21,15 @@ def main():
     subfolder = ''
     if args.subfolder:
         subfolder = args.subfolder
-    
+    generation_function_name = args.generation
     nvis = None
+
+    gen_funs = {
+        'base2': generate_files_with_base2,
+        'random': generate_files_with_random,
+        'nucleus': generate_files_with_nucleus,
+    }
+    gen_fun = gen_funs[generation_function_name]
     
     total_stages = None if curriculum_type == 'f2f' else 10
     condition_dim = None if 'bar' in subfolder else 16
@@ -31,7 +39,7 @@ def main():
 
     intertwine_bar_info = 'bar' in subfolder
 
-    device_name = 'cuda:0'
+    device_name = 'cuda:1'
     base_folder = 'MIDIs_jazz/testsuper/jazz/'
 
     tokenizer = CSGridMLMTokenizer(
@@ -72,62 +80,31 @@ def main():
     )
 
     # then create gen
-    midi_folder = base_folder + curriculum_type + '_' + subfolder
+    midi_folder = base_folder + curriculum_type + '_' + subfolder + '_' + generation_function_name
     if nvis is not None:
         midi_folder += '_nvis' + str(nvis)
     midi_folder += '/'
     os.makedirs(midi_folder, exist_ok=True)
     for val_idx in tqdm(range(len(data_files))):
         input_f = data_files[val_idx]
-        if curriculum_type == 'f2f':
-            gen_harm, real_harm, gen_score, real_score = generate_files_with_nucleus(
-                model=model,
-                tokenizer=tokenizer,
-                input_f=input_f,
-                mxl_folder=None,
-                midi_folder=midi_folder,
-                name_suffix= str(val_idx),
-                intertwine_bar_info=intertwine_bar_info,
-                normalize_tonality=False,
-                use_constraints=False,
-                temperature=0.5,
-                # beam_size=5,
-                # top_k=50,
-                p=0.9,
-                unmasking_order=unmasking_order, # in ['random', 'start', 'end', 'certain', 'uncertain']
-                create_gen=True,
-                create_real=False
-            )
-        elif curriculum_type == 'base2':
-            gen_harm, real_harm, gen_score, real_score = generate_files_with_base2(
-                model=model,
-                tokenizer=tokenizer,
-                input_f=input_f,
-                mxl_folder=None,
-                midi_folder=midi_folder,
-                name_suffix=str(val_idx),
-                use_constraints=False,
-                normalize_tonality=False,
-                num_stages=10,
-                temperature=0.5,
-                create_gen=True,
-                create_real=False
-            )
-        elif curriculum_type == 'random':
-            gen_harm, real_harm, gen_score, real_score = generate_files_with_random(
-                model=model,
-                tokenizer=tokenizer,
-                input_f=input_f,
-                mxl_folder=None,
-                midi_folder=midi_folder,
-                name_suffix=str(val_idx),
-                use_constraints=False,
-                normalize_tonality=False,
-                num_stages=10,
-                temperature=0.5,
-                create_gen=True,
-                create_real=False
-            )
+        gen_harm, real_harm, gen_score, real_score = gen_fun(
+            model=model,
+            tokenizer=tokenizer,
+            input_f=input_f,
+            mxl_folder=None,
+            midi_folder=midi_folder,
+            name_suffix=str(val_idx),
+            use_constraints=False,
+            intertwine_bar_info=intertwine_bar_info,
+            normalize_tonality=False,
+            temperature=1.0,
+            p=0.9,
+            unmasking_order=unmasking_order,
+            num_stages=10,
+            use_conditions=curriculum_type!='f2f',
+            create_gen=True,
+            create_real=False
+        )
 
 if __name__ == '__main__':
     main()
