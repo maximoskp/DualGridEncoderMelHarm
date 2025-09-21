@@ -33,7 +33,10 @@ scripts=(
     # "train_semh.py -c base2 -f Q4_L80_bar_PC_FR -d /media/maindisk/data/hooktheory_midi_hr/CA_train -v /media/maindisk/data/hooktheory_midi_hr/CA_test -g 1 -e 200 -l 1e-4 -b 8"
     # "train_semh.py -c random -f Q4_L80_bar_PC -d /media/maindisk/data/hooktheory_midi_hr/CA_train -v /media/maindisk/data/hooktheory_midi_hr/CA_test -g 1 -e 200 -l 1e-4 -b 8"
     # "train_semh.py -c base2 -f Q4_L80_bar_PC -d /media/maindisk/data/hooktheory_midi_hr/CA_train -v /media/maindisk/data/hooktheory_midi_hr/CA_test -g 1 -e 200 -l 1e-4 -b 8"
-    "train_semh.py -c f2f -f Q4_L80_bar_PC -d /media/maindisk/data/hooktheory_midi_hr/CA_train -v /media/maindisk/data/hooktheory_midi_hr/CA_test -g 0 -e 200 -l 1e-4 -b 8"
+    # "train_semh.py -c f2f -f Q4_L80_bar_PC -d /media/maindisk/data/hooktheory_midi_hr/CA_train -v /media/maindisk/data/hooktheory_midi_hr/CA_test -g 0 -e 200 -l 1e-4 -b 8"
+    "train_art_semh.py -c base2 -f Q4_L80_bar_PC -d /media/maindisk/data/synthetic_CA_train -v /media/maindisk/data/synthetic_CA_test -g 0 -e 200 -l 1e-4 -b 8"
+    "train_art_semh.py -c random -f Q4_L80_bar_PC -d /media/maindisk/data/synthetic_CA_train -v /media/maindisk/data/synthetic_CA_test -g 0 -e 200 -l 1e-4 -b 8"
+    "train_art_semh.py -c f2f -f Q4_L80_bar_PC -d /media/maindisk/data/synthetic_CA_train -v /media/maindisk/data/synthetic_CA_test -g 0 -e 200 -l 1e-4 -b 8"
 )
 
 # Name of the conda environment

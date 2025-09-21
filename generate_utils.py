@@ -82,8 +82,8 @@ def random_progressive_generate(
                 )  # (1, seq_len, vocab_size)
             else:
                 stage = int(
-                    ((visible_harmony == mask_token_id).sum().item()/visible_harmony.size()[0])*num_stages
-                    )
+                    ((visible_harmony == mask_token_id).sum().item()/visible_harmony.size().numel())*num_stages
+                )
                 logits = model(
                     melody_grid=melody_grid.to(model.device),
                     conditioning_vec=conditioning_vec.to(model.device),

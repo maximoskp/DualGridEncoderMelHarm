@@ -97,7 +97,7 @@ def main():
             use_constraints=False,
             intertwine_bar_info=intertwine_bar_info,
             normalize_tonality=False,
-            temperature=1.0,
+            temperature=0.2,
             p=0.9,
             unmasking_order=unmasking_order,
             num_stages=10,
