@@ -40,6 +40,7 @@ def main():
     intertwine_bar_info = 'bar' in subfolder
 
     device_name = 'cuda:2'
+    # device_name = 'cuda:0'
     base_folder = 'MIDIs_jazz/testsuper/jazz/'
 
     tokenizer = CSGridMLMTokenizer(
@@ -101,7 +102,7 @@ def main():
             p=0.9,
             unmasking_order=unmasking_order,
             num_stages=10,
-            use_conditions=curriculum_type!='f2f',
+            use_conditions=condition_dim is not None,
             create_gen=True,
             create_real=False
         )
