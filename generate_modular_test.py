@@ -39,8 +39,7 @@ def main():
 
     intertwine_bar_info = 'bar' in subfolder
 
-    device_name = 'cuda:1'
-    # device_name = 'cpu'
+    device_name = 'cuda:0'
     base_folder = 'MIDIs/testsuper/testset/'
 
     tokenizer = CSGridMLMTokenizer(

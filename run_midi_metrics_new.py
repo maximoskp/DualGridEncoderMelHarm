@@ -973,6 +973,9 @@ def compute_and_save_html_results_by_setup(
     """
     html_tables = []
 
+    metric_cols = ["CHE", "CC", "CTD", "CTnCTR", "PCS", "MCTD", "HRHE_i", "HRC_i", "HRHE_o", "HRC_o", "CBS"]
+    df_full = pd.DataFrame(columns=["Instance"] + metric_cols)
+
     for setup_name in sorted(os.listdir(root_folder)):
         setup_path = os.path.join(root_folder, setup_name)
         if not os.path.isdir(setup_path):
@@ -991,8 +994,8 @@ def compute_and_save_html_results_by_setup(
             continue
 
         df = pd.DataFrame(rows)
+        df_full = pd.concat([df_full, df], ignore_index=True)
 
-        metric_cols = ["CHE", "CC", "CTD", "CTnCTR", "PCS", "MCTD", "HRHE_i", "HRC_i", "HRHE_o", "HRC_o", "CBS"]
         # Only highlight on those columns that actually exist (guards against empties)
         present_cols = [c for c in metric_cols if c in df.columns]
 
@@ -1039,7 +1042,8 @@ def compute_and_save_html_results_by_setup(
     with open(output_html, "w", encoding="utf-8") as f:
         f.write(full_html)
     print(f"HTML results saved to {output_html}")
-
+    df_full.to_csv(output_html.replace('.html', '.csv'), index=False)
+    print(f"CSV results saved to {output_html.replace('.html', '.csv')}")
 
 if __name__ == "__main__":
     ground_truth_path = "./MIDIs_nucleus_t05_p09/real"          # folder with the ground-truth MIDIs

@@ -40,7 +40,6 @@ def main():
     intertwine_bar_info = 'bar' in subfolder
 
     device_name = 'cuda:2'
-    # device_name = 'cuda:0'
     base_folder = 'MIDIs_jazz/testsuper/jazz/'
 
     tokenizer = CSGridMLMTokenizer(

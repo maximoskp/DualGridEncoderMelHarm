@@ -75,15 +75,16 @@ def random_progressive_generate(
         last_active_index = -1  # Don't clamp anything if not forced
     while (visible_harmony == mask_token_id).any():
         with torch.no_grad():
-            if conditioning_vec is None or num_stages is None:
+            stage = int(
+                ((visible_harmony == mask_token_id).sum().item()/visible_harmony.size().numel())*num_stages
+            )
+            if conditioning_vec is None:
                 logits = model(
                     melody_grid=melody_grid.to(model.device),
                     harmony_tokens=visible_harmony.to(model.device),
+                    stage_indices=torch.LongTensor([stage]).to(model.device)
                 )  # (1, seq_len, vocab_size)
             else:
-                stage = int(
-                    ((visible_harmony == mask_token_id).sum().item()/visible_harmony.size().numel())*num_stages
-                )
                 logits = model(
                     melody_grid=melody_grid.to(model.device),
                     conditioning_vec=conditioning_vec.to(model.device),
@@ -434,15 +435,16 @@ def nucleus_token_by_token_generate(
     step = 0
     while (visible_harmony == mask_token_id).any():
         with torch.no_grad():
-            if conditioning_vec is None or num_stages is None:
+            stage = int(
+                ((visible_harmony == mask_token_id).sum().item()/visible_harmony.size().numel())*num_stages
+            )
+            if conditioning_vec is None:
                 logits = model(
                     melody_grid=melody_grid.to(model.device),
                     harmony_tokens=visible_harmony.to(model.device),
+                    stage_indices=torch.LongTensor([stage]).to(model.device)
                 )  # (1, seq_len, vocab_size)
             else:
-                stage = int(
-                    ((visible_harmony != mask_token_id).sum().item()/visible_harmony.size().numel())*num_stages
-                )
                 logits = model(
                     melody_grid=melody_grid.to(model.device),
                     conditioning_vec=conditioning_vec.to(model.device),
@@ -566,6 +568,7 @@ def structured_progressive_generate(
                 logits = model(
                     melody_grid=melody_grid.to(model.device),
                     harmony_tokens=visible_harmony.to(model.device),
+                    stage_indices=torch.LongTensor([stage]).to(model.device)
                 )  # (1, seq_len, vocab_size)
 
         if force_fill and (pad_token_id is not None and nc_token_id is not None):
