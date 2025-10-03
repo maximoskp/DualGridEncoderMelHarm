@@ -18,7 +18,6 @@ def main():
     parser = argparse.ArgumentParser(description='Script for training a GridMLM model with a specific curriculum type.')
 
     # Define arguments
-    parser.add_argument('-x', '--exponent', type=int, help='Unmasking exponent.', required=True)
     parser.add_argument('-f', '--subfolder', type=str, help='Specify subfolder to save the model and results.', required=False)
     parser.add_argument('-d', '--datatrain', type=str, help='Specify the full path to the root folder of the training xml/mxl files', required=True)
     parser.add_argument('-v', '--dataval', type=str, help='Specify the full path to the root folder of the validation xml/mxl files', required=True)
@@ -31,8 +30,6 @@ def main():
     args = parser.parse_args()
     curriculum_type = 'f2f'
     exponent = 5
-    if args.exponent:
-        exponent = args.exponent
     subfolder = ''
     if args.subfolder:
         subfolder = args.subfolder
@@ -51,14 +48,15 @@ def main():
     batchsize = 16
     if args.batchsize:
         batchsize = args.batchsize
-
+    
+    grid_lenght = int(subfolder.split('_L')[1].split('_')[0])
     tokenizer = CSGridMLMTokenizer(
-        fixed_length=80,
-        quantization='4th',
-        intertwine_bar_info=True,
+        fixed_length=grid_lenght,
+        quantization='16th' if 'Q16' in subfolder else '4th',
+        intertwine_bar_info='bar' in subfolder,
         trim_start=False,
-        use_pc_roll=True,
-        use_full_range_melody=False
+        use_pc_roll='PC' in subfolder,
+        use_full_range_melody='FR' in subfolder
     )
 
     def compute_class_weights_from_dataset(dataset, tokenizer, scheme="temp", alpha=0.5, beta=0.999, ignore_index=-100):
@@ -110,8 +108,8 @@ def main():
         return weights
     # end compute_class_weights_from_dataset
 
-    train_dataset = CSGridMLMDataset(train_dir, tokenizer, name_suffix='DE')
-    val_dataset = CSGridMLMDataset(val_dir, tokenizer, name_suffix='DE')
+    train_dataset = CSGridMLMDataset(train_dir, tokenizer, name_suffix=subfolder)
+    val_dataset = CSGridMLMDataset(val_dir, tokenizer, name_suffix=subfolder)
 
     trainloader = DataLoader(train_dataset, batch_size=batchsize, shuffle=True, collate_fn=CSGridMLM_collate_fn)
     valloader = DataLoader(val_dataset, batch_size=batchsize, shuffle=False, collate_fn=CSGridMLM_collate_fn)
@@ -141,8 +139,8 @@ def main():
         nhead=8,
         num_layers_mel=8,
         num_layers_harm=8,
-        melody_length=80,
-        harmony_length=80,
+        melody_length=grid_lenght,
+        harmony_length=grid_lenght,
         pianoroll_dim=tokenizer.pianoroll_dim,
         device=device,
     )
@@ -152,17 +150,20 @@ def main():
     # save results
     os.makedirs('results/DE/', exist_ok=True)
     os.makedirs('results/DE/' + subfolder + '/', exist_ok=True)
-    results_path = 'results/DE/' + subfolder + '/' + curriculum_type + str(exponent) + '.csv'
+    results_path = 'results/DE/' + subfolder + '/' + curriculum_type + '.csv'
 
     os.makedirs('saved_models/DE/', exist_ok=True)
     os.makedirs('saved_models/DE/' + subfolder + '/', exist_ok=True)
     save_dir = 'saved_models/DE/' + subfolder + '/'
-    transformer_path = save_dir + curriculum_type + str(exponent) + '.pt'
+    transformer_path = save_dir + curriculum_type + '.pt'
 
     train_with_curriculum(
         model, optimizer, trainloader, valloader, loss_fn, tokenizer.mask_token_id,
+        curriculum_type=curriculum_type,
         epochs=epochs,
+        condition_dim=None,
         exponent=exponent,
+        total_stages=None,
         results_path=results_path,
         transformer_path=transformer_path,
         bar_token_id=tokenizer.bar_token_id

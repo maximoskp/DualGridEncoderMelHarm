@@ -28,7 +28,7 @@
 # f2f Q4 bar PC only. 6) Is the much simpler setup equally good better (no stage, not trainable pos_emb, curriculum that starts with cross attention)?
 scripts=(
     # "train_semh.py -c base2 -f Q16_L256_PC_FR -d /media/maindisk/data/hooktheory_midi_hr/CA_train -v /media/maindisk/data/hooktheory_midi_hr/CA_test -g 1 -e 200 -l 1e-4 -b 8"
-    "train_semh.py -c base2 -f Q16_L272_bar_PC_FR -d /media/maindisk/data/hooktheory_midi_hr/CA_train -v /media/maindisk/data/hooktheory_midi_hr/CA_test -g 0 -e 200 -l 1e-4 -b 8"
+    # "train_semh.py -c base2 -f Q16_L272_bar_PC_FR -d /media/maindisk/data/hooktheory_midi_hr/CA_train -v /media/maindisk/data/hooktheory_midi_hr/CA_test -g 0 -e 200 -l 1e-4 -b 8"
     # "train_semh.py -c base2 -f Q4_L64_PC_FR -d /media/maindisk/data/hooktheory_midi_hr/CA_train -v /media/maindisk/data/hooktheory_midi_hr/CA_test -g 1 -e 200 -l 1e-4 -b 8"
     # "train_semh.py -c base2 -f Q4_L80_bar_PC_FR -d /media/maindisk/data/hooktheory_midi_hr/CA_train -v /media/maindisk/data/hooktheory_midi_hr/CA_test -g 1 -e 200 -l 1e-4 -b 8"
     # "train_semh.py -c random -f Q4_L80_bar_PC -d /media/maindisk/data/hooktheory_midi_hr/CA_train -v /media/maindisk/data/hooktheory_midi_hr/CA_test -g 1 -e 200 -l 1e-4 -b 8"
@@ -43,10 +43,13 @@ scripts=(
     # "train_semh.py -c f2f -f Q4_L64_PC_FR -d /media/maindisk/data/hooktheory_midi_hr/CA_train -v /media/maindisk/data/hooktheory_midi_hr/CA_test -g 0 -e 200 -l 1e-4 -b 8"
     # "train_semh.py -c f2f -f Q4_L80_bar_PC_FR -d /media/maindisk/data/hooktheory_midi_hr/CA_train -v /media/maindisk/data/hooktheory_midi_hr/CA_test -g 0 -e 200 -l 1e-4 -b 8"
     # "train_semh.py -c f2f -f Q16_L256_PC_FR -d /media/maindisk/data/hooktheory_midi_hr/CA_train -v /media/maindisk/data/hooktheory_midi_hr/CA_test -g 2 -e 200 -l 1e-4 -b 8"
-    "train_semh.py -c f2f -f Q16_L272_bar_PC_FR -d /media/maindisk/data/hooktheory_midi_hr/CA_train -v /media/maindisk/data/hooktheory_midi_hr/CA_test -g 2 -e 200 -l 1e-4 -b 8"
+    # "train_semh.py -c f2f -f Q16_L272_bar_PC_FR -d /media/maindisk/data/hooktheory_midi_hr/CA_train -v /media/maindisk/data/hooktheory_midi_hr/CA_test -g 2 -e 200 -l 1e-4 -b 8"
     # "train_semh.py -c f2f -f Q16_L256_PC -d /media/maindisk/data/hooktheory_midi_hr/CA_train -v /media/maindisk/data/hooktheory_midi_hr/CA_test -g 0 -e 200 -l 1e-4 -b 8"
     
-    "train_semh.py -c f2f -f Q16_L272_bar_PC -d /media/maindisk/data/hooktheory_midi_hr/CA_train -v /media/maindisk/data/hooktheory_midi_hr/CA_test -g 0 -e 200 -l 1e-4 -b 8"
+    # "train_semh.py -c f2f -f Q16_L272_bar_PC -d /media/maindisk/data/hooktheory_midi_hr/CA_train -v /media/maindisk/data/hooktheory_midi_hr/CA_test -g 0 -e 200 -l 1e-4 -b 8"
+
+    # DE
+    "train_demh.py -f Q4_L80_bar_PC -d /media/maindisk/data/hooktheory_midi_hr/CA_train -v /media/maindisk/data/hooktheory_midi_hr/CA_test -g 0 -e 200 -l 1e-4 -b 8"
 )
 
 # Name of the conda environment

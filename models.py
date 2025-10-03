@@ -190,12 +190,10 @@ class DualGridMLMMelHarm(nn.Module):
         self.to(device)
     # end init
 
-    def forward(self, melody_grid, harmony_tokens=None,
-                melody_key_padding_mask=None, harm_key_padding_mask=None):
+    def forward(self, melody_grid, harmony_tokens=None, *args):
         """
         melody_grid: (B, Lm, pianoroll_dim)  -> melody features (PCP + bar flag etc.)
         harmony_tokens: (B, Lh) token ids, or None (then zeros used)
-        stage_indices: (B,) or (B,1) ints in [0, max_stages-1] - used by harmony encoder
         Returns:
             harmony_logits: (B, Lh, V)
         """
@@ -208,7 +206,7 @@ class DualGridMLMMelHarm(nn.Module):
         mel = self.input_norm(mel)
         mel = self.dropout(mel)
 
-        mel_encoded = self.melody_encoder(mel, src_key_padding_mask=melody_key_padding_mask)  # (B, Lm, d_model)
+        mel_encoded = self.melody_encoder(mel, src_key_padding_mask=None)  # (B, Lm, d_model)
 
         # ---- Harmony embedding + optional stage conditioning ----
         if harmony_tokens is not None:
@@ -224,8 +222,8 @@ class DualGridMLMMelHarm(nn.Module):
 
         # ---- Harmony encoder: self + cross-attn into melody ----
         harm_encoded = self.harmony_encoder(harm, mel_encoded,
-                                            h_key_padding_mask=harm_key_padding_mask,
-                                            melody_key_padding_mask=melody_key_padding_mask)  # (B, Lh, d_model)
+                                            h_key_padding_mask=None,
+                                            melody_key_padding_mask=None)  # (B, Lh, d_model)
 
         harm_encoded = self.output_norm(harm_encoded)
 
