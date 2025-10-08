@@ -190,7 +190,7 @@ class DualGridMLMMelHarm(nn.Module):
         self.to(device)
     # end init
 
-    def forward(self, melody_grid, harmony_tokens=None, *args):
+    def forward(self, melody_grid, harmony_tokens=None, *args, **kwargs):
         """
         melody_grid: (B, Lm, pianoroll_dim)  -> melody features (PCP + bar flag etc.)
         harmony_tokens: (B, Lh) token ids, or None (then zeros used)

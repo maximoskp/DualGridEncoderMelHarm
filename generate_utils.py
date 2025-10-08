@@ -773,7 +773,6 @@ def load_DE_model(
     tokenizer=None,
     melody_length=80,
     harmony_length=80,
-    exponent=5,
     nvis=None
 ):
     if device_name == 'cpu':
@@ -790,12 +789,12 @@ def load_DE_model(
         nhead=nhead,
         num_layers_mel=num_layers_mel,
         num_layers_harm=num_layers_harm,
-        device=device,
         melody_length=melody_length,
         harmony_length=harmony_length,
         pianoroll_dim=tokenizer.pianoroll_dim,
+        device=device,
     )
-    model_path = 'saved_models/' + subfolder + '/' + curriculum_type + str(exponent)
+    model_path = 'saved_models/DE/' + subfolder + '/' + curriculum_type
     if nvis is not None:
         model_path += '_nvis' + str(nvis)
     model_path += '.pt'
