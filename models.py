@@ -50,7 +50,8 @@ class HarmonyEncoderLayerWithCross(nn.Module):
         self.norm3 = nn.LayerNorm(d_model, device=device)
         self.dropout1 = nn.Dropout(dropout)
         self.dropout2 = nn.Dropout(dropout)
-        self.dropout3 = nn.Dropout(dropout)
+        self.dropout_ff_in = nn.Dropout(dropout)
+        self.dropout_ff_out = nn.Dropout(dropout)
 
         # placeholders for attention visualization
         self.last_self_attn = None  # shape (B, nhead, Lh, Lh) if requested
@@ -66,33 +67,38 @@ class HarmonyEncoderLayerWithCross(nn.Module):
         melody_key_padding_mask: optional for cross-attn (for melody padding)
         """
         # Self-attention
+        x_h = self.norm1(x_h) # pre norm
         h2, self_w = self.self_attn(x_h, x_h, x_h,
                                     attn_mask=attn_mask,
                                     key_padding_mask=key_padding_mask,
                                     need_weights=True,
                                     average_attn_weights=False)
         # self_w : (B, nhead, Lh, Lh)  if batch_first and average_attn_weights=False
-        self.last_self_attn = self_w.detach() if isinstance(self_w, torch.Tensor) else None
+        if not self.training:
+            self.last_self_attn = self_w.detach() if isinstance(self_w, torch.Tensor) else None
 
         x_h = x_h + self.dropout1(h2)
-        x_h = self.norm1(x_h)
+        # x_h = self.norm1(x_h)
         # x_h = self.norm1(h2)
 
         # Cross-attention: queries = harmony (x_h), keys/values = melody_kv
+        x_h = self.norm2(x_h) # pre norm
         c2, cross_w = self.cross_attn(x_h, melody_kv, melody_kv,
                                       key_padding_mask=melody_key_padding_mask,
                                       need_weights=True,
                                       average_attn_weights=False)
-        self.last_cross_attn = cross_w.detach() if isinstance(cross_w, torch.Tensor) else None
+        if not self.training:
+            self.last_cross_attn = cross_w.detach() if isinstance(cross_w, torch.Tensor) else None
 
         x_h = x_h + self.dropout2(c2)
-        x_h = self.norm2(x_h)
+        # x_h = self.norm2(x_h)
         # x_h = self.norm2(c2)
 
         # Feed-forward
-        ff = self.linear2(self.dropout3(self.activation(self.linear1(x_h))))
-        x_h = x_h + self.dropout3(ff)
-        x_h = self.norm3(x_h)
+        x_h = self.norm3(x_h) # pre norm
+        ff = self.linear2(self.dropout_ff_in(self.activation(self.linear1(x_h))))
+        x_h = x_h + self.dropout_ff_out(ff)
+        # x_h = self.norm3(x_h)
 
         return x_h
     # end forward
@@ -163,7 +169,7 @@ class DualGridMLMMelHarm(nn.Module):
         )
 
         # Melody encoder: use standard transformer encoder layers
-        encoder_layer_mel = nn.TransformerEncoderLayer(d_model=d_model,
+        encoder_layer_mel = TransformerEncoderLayerWithAttn(d_model=d_model,
                                                        nhead=nhead,
                                                        dim_feedforward=dim_feedforward,
                                                        dropout=dropout,
@@ -183,8 +189,10 @@ class DualGridMLMMelHarm(nn.Module):
         self.output_head = nn.Linear(d_model, chord_vocab_size, device=device)
 
         # Norms / dropout
-        self.input_norm = nn.LayerNorm(d_model, device=device)
-        self.output_norm = nn.LayerNorm(d_model, device=device)
+        self.input_norm_mel = nn.LayerNorm(d_model, device=device)
+        self.output_norm_mel = nn.LayerNorm(d_model, device=device)
+        self.input_norm_harm = nn.LayerNorm(d_model, device=device)
+        self.output_norm_harm = nn.LayerNorm(d_model, device=device)
         self.dropout = nn.Dropout(dropout)
 
         self.to(device)
@@ -203,12 +211,13 @@ class DualGridMLMMelHarm(nn.Module):
         # ---- Melody encoding ----
         mel = self.melody_proj(melody_grid)                    # (B, Lm, d_model)
         mel = mel + self.shared_pos[:, :self.melody_length, :]
-        mel = self.input_norm(mel)
+        mel = self.input_norm_mel(mel)
         mel = self.dropout(mel)
 
         mel_encoded = self.melody_encoder(mel, src_key_padding_mask=None)  # (B, Lm, d_model)
+        mel_encoded = self.output_norm_mel(mel_encoded)
 
-        # ---- Harmony embedding + optional stage conditioning ----
+        # ---- Harmony embedding ----
         if harmony_tokens is not None:
             harm = self.harmony_embedding(harmony_tokens)      # (B, Lh, d_model)
         else:
@@ -217,15 +226,13 @@ class DualGridMLMMelHarm(nn.Module):
         # add harmony positional encodings
         harm = harm + self.shared_pos[:, :self.harmony_length, :]
 
-        harm = self.input_norm(harm)
+        harm = self.input_norm_harm(harm)
         harm = self.dropout(harm)
 
         # ---- Harmony encoder: self + cross-attn into melody ----
-        harm_encoded = self.harmony_encoder(harm, mel_encoded,
-                                            h_key_padding_mask=None,
-                                            melody_key_padding_mask=None)  # (B, Lh, d_model)
+        harm_encoded = self.harmony_encoder(harm, mel_encoded)  # (B, Lh, d_model)
 
-        harm_encoded = self.output_norm(harm_encoded)
+        harm_encoded = self.output_norm_harm(harm_encoded)
 
         # ---- Output logits (only harmony positions) ----
         harmony_logits = self.output_head(harm_encoded)  # (B, Lh, V)
@@ -266,7 +273,8 @@ class TransformerEncoderLayerWithAttn(TransformerEncoderLayer):
             need_weights=True,
             average_attn_weights=False
         )
-        self.last_attn_weights = attn_weights.detach()  # store for later
+        if not self.training:
+            self.last_attn_weights = attn_weights.detach()  # store for later
 
         # rest of the computation is copied from TransformerEncoderLayer
         src = src + self.dropout1(src2)
@@ -403,7 +411,8 @@ class SEModular(nn.Module):
         self.trainable_pos_emb = trainable_pos_emb
 
         # Melody projection: pianoroll_dim binary -> d_model
-        self.melody_proj = nn.Linear(pianoroll_dim, d_model, device=self.device)
+        # self.melody_proj = nn.Linear(pianoroll_dim, d_model, device=self.device)
+        self.melody_proj = nn.Embedding(chord_vocab_size, d_model, device=self.device)
         # Harmony token embedding: V -> d_model
         self.harmony_embedding = nn.Embedding(chord_vocab_size, d_model, device=self.device)
 
@@ -517,3 +526,289 @@ class SEModular(nn.Module):
         return self_attns
     # end get_attention_maps
 # end class SEModular
+
+# from simple models
+
+# ======== Transformer Blocks ========
+
+class SelfAttention(nn.Module):
+    def __init__(self, d_model, n_heads, device='cpu'):
+        super().__init__()
+        self.attn = nn.MultiheadAttention(d_model, n_heads, batch_first=True, device=device)
+        self.last_attn = None  # store for visualization
+
+    def forward(self, x, attn_mask=None, key_padding_mask=None):
+        out, attn_weights = self.attn(
+            x, x, x,
+            attn_mask=attn_mask,
+            key_padding_mask=key_padding_mask,
+            need_weights=True,
+            average_attn_weights=False
+        )
+        self.last_attn = attn_weights  # (batch, heads, seq, seq)
+        return out
+# end SelfAttention
+
+class CrossAttention(nn.Module):
+    def __init__(self, d_model, n_heads, device='cpu'):
+        super().__init__()
+        self.attn = nn.MultiheadAttention(d_model, n_heads, batch_first=True, device=device)
+        self.last_attn = None
+
+    def forward(self, q, kv, attn_mask=None, key_padding_mask=None):
+        out, attn_weights = self.attn(
+            q, kv, kv,
+            attn_mask=attn_mask,
+            key_padding_mask=key_padding_mask,
+            need_weights=True,
+            average_attn_weights=False
+        )
+        self.last_attn = attn_weights  # (batch, heads, q_len, kv_len)
+        return out
+# end CrossAttention
+
+class TransformerBlock(nn.Module):
+    def __init__(self, d_model, n_heads, dim_ff, device='cpu'):
+        super().__init__()
+        self.self_attn = SelfAttention(d_model, n_heads, device=device)
+        self.ff = nn.Sequential(
+            nn.Linear(d_model, dim_ff, device=device),
+            nn.GELU(),
+            nn.Linear(dim_ff, d_model, device=device),
+        )
+        self.norm1 = nn.LayerNorm(d_model, device=device)
+        self.norm2 = nn.LayerNorm(d_model, device=device)
+        self.last_attn_weights = None  # place to store the weights
+    # end init
+
+    def forward(self, x, attn_mask=None, key_padding_mask=None):
+        # Self-attention
+        sa = self.self_attn(x, attn_mask=attn_mask, key_padding_mask=key_padding_mask)
+        self.last_attn_weights = self.self_attn.last_attn.detach()  # store for later
+        x = self.norm1(x + sa)
+        # Feedforward
+        ff = self.ff(x)
+        x = self.norm2(x + ff)
+        return x
+# end TransformerBlock
+
+class CrossTransformerBlock(nn.Module):
+    """For H-encoder with self + cross attention"""
+    def __init__(self, d_model, n_heads, dim_ff, device='cpu'):
+        super().__init__()
+        self.self_attn = SelfAttention(d_model, n_heads, device=device)
+        self.cross_attn = CrossAttention(d_model, n_heads, device=device)
+        self.ff = nn.Sequential(
+            nn.Linear(d_model, dim_ff, device=device),
+            nn.GELU(),
+            nn.Linear(dim_ff, d_model, device=device),
+        )
+        self.norm1 = nn.LayerNorm(d_model, device=device)
+        self.norm2 = nn.LayerNorm(d_model, device=device)
+        self.norm3 = nn.LayerNorm(d_model, device=device)
+        self.self_attn_weights = None  # place to store the weights
+        self.cross_attn_weights = None  # place to store the weights
+    # end init
+
+    def forward(self, x, mem, attn_mask=None, key_padding_mask=None):
+        # Self-attention on H
+        sa = self.self_attn(x, attn_mask=attn_mask, key_padding_mask=key_padding_mask)
+        self.self_attn_weights = self.self_attn.last_attn.detach()  # store for later
+        x = self.norm1(x + sa)
+        # Cross-attention to M
+        ca = self.cross_attn(x, mem)
+        self.cross_attn_weights = self.cross_attn.last_attn.detach()  # store for later
+        x = self.norm2(x + ca)
+        # Feedforward
+        ff = self.ff(x)
+        x = self.norm3(x + ff)
+        return x
+# end CrossTransformerBlock
+
+# ======== Models ========
+
+class DualEncoderModel(nn.Module):
+    def __init__(
+            self, 
+            m_vocab_size, 
+            h_vocab_size, 
+            seq_len, 
+            d_model=128, 
+            n_heads=4, 
+            num_layers=2, 
+            dim_ff=256,
+            device='cpu'
+        ):
+        super().__init__()
+        self.pos = sinusoidal_positional_encoding(
+            seq_len, d_model, device=device
+        )
+        self.m_embed = nn.Embedding(m_vocab_size, d_model, device=device)
+        self.h_embed = nn.Embedding(h_vocab_size, d_model, device=device)
+
+        self.melody_encoder = nn.ModuleList([TransformerBlock(d_model, n_heads, dim_ff, device=device) for _ in range(num_layers)])
+        self.harmony_encoder = nn.ModuleList([CrossTransformerBlock(d_model, n_heads, dim_ff, device=device) for _ in range(num_layers)])
+
+        self.out_proj = nn.Linear(d_model, h_vocab_size, device=device)
+        self.device = device
+    # end init
+
+    def forward(self, m_seq, h_seq, h_attn_mask=None):
+        m = self.m_embed(m_seq)
+        h = self.h_embed(h_seq)
+
+        m = m + self.pos
+        h = h + self.pos
+
+        # Melody encoder
+        for layer in self.melody_encoder:
+            m = layer(m)
+
+        # Harmony encoder with cross-attn
+        for layer in self.harmony_encoder:
+            h = layer(h, mem=m, attn_mask=h_attn_mask)
+
+        logits = self.out_proj(h)
+        return logits
+    # end forward
+
+    # optionally add helpers to extract attention maps across layers:
+    def get_attention_maps(self):
+        """
+        Returns lists of per-layer attention tensors for self and cross attentions.
+            self_attns = [layer.last_self_attn, ...]
+            cross_attns = [layer.last_cross_attn, ...]
+        Each element can be None (if not computed) or a tensor (B, nhead, Lh, Lh)/(B, nhead, Lh, Lm).
+        """
+        self_attns = []
+        cross_attns = []
+        for layer in self.harmony_encoder:
+            self_attns.append(layer.self_attn_weights)
+            cross_attns.append(layer.cross_attn_weights)
+        return self_attns, cross_attns
+    # end get_attention_maps
+# end DualEncoderModel
+
+class SingleEncoderModel(nn.Module):
+    def __init__(
+            self, 
+            m_vocab_size, 
+            h_vocab_size, 
+            seq_len, 
+            d_model=128, 
+            n_heads=4, 
+            num_layers=2, 
+            dim_ff=256,
+            device='cpu'
+        ):
+        super().__init__()
+        self.pos = sinusoidal_positional_encoding(
+            seq_len, d_model, device=device
+        )
+        self.seq_len = seq_len
+        self.m_embed = nn.Embedding(m_vocab_size, d_model, device=device)
+        self.h_embed = nn.Embedding(h_vocab_size, d_model, device=device)
+        self.encoder = nn.ModuleList([TransformerBlock(d_model, n_heads, dim_ff, device=device) for _ in range(num_layers)])
+        self.out_proj = nn.Linear(d_model, h_vocab_size, device=device)
+        self.device = device
+    # end init
+
+    def forward(self, m_seq, h_seq, attn_mask=None):
+        m = self.m_embed(m_seq)
+        h = self.h_embed(h_seq)
+
+        m = m + self.pos
+        h = h + self.pos
+
+        x = torch.cat([m, h], dim=1)
+        for layer in self.encoder:
+            x = layer(x, attn_mask=attn_mask)
+        logits = self.out_proj(x[:, -self.seq_len:, :])
+        return logits
+    # end forward
+
+    # optionally add helpers to extract attention maps across layers:
+    def get_attention_maps(self):
+        """
+        Returns lists of per-layer attention tensors for self and cross attentions.
+            self_attns = [layer.last_self_attn, ...]
+        Each element can be None (if not computed) or a tensor (B, nhead, Lh, Lh)/(B, nhead, Lh, Lm).
+        """
+        self_attns = []
+        for layer in self.encoder:
+            self_attns.append(layer.last_attn_weights)
+        return self_attns
+    # end get_attention_maps
+# end SingleEncoderModel
+
+class SimpleDE(nn.Module):
+    def __init__(
+            self, 
+            chord_vocab_size,
+            d_model=512,
+            nhead=8,
+            num_layers_mel=8,
+            num_layers_harm=8,
+            dim_feedforward=2048,
+            pianoroll_dim=13,      # PCP + bars only
+            melody_length=80,
+            harmony_length=80,
+            dropout=0.3,
+            device='cpu'
+        ):
+        super().__init__()
+        self.device = device
+
+        self.d_model = d_model
+        self.melody_length = melody_length
+        self.harmony_length = harmony_length
+        
+        self.pos = sinusoidal_positional_encoding(
+            melody_length, d_model, device=device
+        )
+        self.m_embed = nn.Linear(pianoroll_dim, d_model, device=device)   # project PCP (and bar flag) -> d_model
+        # self.m_embed = nn.Embedding(chord_vocab_size, d_model, device=device)
+        self.h_embed = nn.Embedding(chord_vocab_size, d_model, device=device)
+
+        self.melody_encoder = nn.ModuleList([TransformerBlock(d_model, nhead, dim_feedforward, device=device) for _ in range(num_layers_mel)])
+        self.harmony_encoder = nn.ModuleList([CrossTransformerBlock(d_model, nhead, dim_feedforward, device=device) for _ in range(num_layers_harm)])
+
+        self.out_proj = nn.Linear(d_model, chord_vocab_size, device=device)
+        self.device = device
+    # end init
+
+    def forward(self, m_seq, h_seq, h_attn_mask=None, *args, **kwargs):
+        m = self.m_embed(m_seq)
+        h = self.h_embed(h_seq)
+
+        m = m + self.pos
+        h = h + self.pos
+
+        # Melody encoder
+        for layer in self.melody_encoder:
+            m = layer(m)
+
+        # Harmony encoder with cross-attn
+        for layer in self.harmony_encoder:
+            h = layer(h, mem=m, attn_mask=h_attn_mask)
+
+        logits = self.out_proj(h)
+        return logits
+    # end forward
+
+    # optionally add helpers to extract attention maps across layers:
+    def get_attention_maps(self):
+        """
+        Returns lists of per-layer attention tensors for self and cross attentions.
+            self_attns = [layer.last_self_attn, ...]
+            cross_attns = [layer.last_cross_attn, ...]
+        Each element can be None (if not computed) or a tensor (B, nhead, Lh, Lh)/(B, nhead, Lh, Lm).
+        """
+        self_attns = []
+        cross_attns = []
+        for layer in self.harmony_encoder:
+            self_attns.append(layer.self_attn_weights)
+            cross_attns.append(layer.cross_attn_weights)
+        return self_attns, cross_attns
+    # end get_attention_maps
+# end SimpleDE

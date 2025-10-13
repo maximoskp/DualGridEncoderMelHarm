@@ -446,6 +446,7 @@ def validation_loop(curriculum_type, model, valloader, mask_token_id, bar_token_
                 # Forward pass
                 logits = model(
                     melody_grid.to(device),
+                    # harmony_gt.to(device),
                     harmony_input.to(device),
                     conditioning_vec,
                     stage_indices
@@ -578,10 +579,10 @@ def train_with_curriculum(
                         curriculum_type=curriculum_type
                     )
                     num_visible = -1
-                
                 # Forward pass
                 logits = model(
                     melody_grid.to(device),
+                    # harmony_gt.to(device),
                     harmony_input.to(device),
                     conditioning_vec,
                     stage_indices

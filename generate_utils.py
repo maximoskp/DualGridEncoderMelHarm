@@ -5,7 +5,7 @@ from music21 import harmony, stream, metadata, chord, note, key, meter, tempo, d
 import mir_eval
 import numpy as np
 from copy import deepcopy
-from models import DualGridMLMMelHarm, SingleGridMLMelHarm, SEModular
+from models import DualGridMLMMelHarm, SingleGridMLMelHarm, SEModular, SimpleDE
 import os
 from music_utils import transpose_score
 
@@ -484,6 +484,7 @@ def nucleus_token_by_token_generate(
 
         # --- Nucleus sampling step ---
         logits_pos = logits[0, pos] / temperature
+        logits_pos[ mask_token_id ] = logits_pos.min().item()/100  # prevent selecting mask token
         probs_pos = torch.softmax(logits_pos, dim=-1)
 
         # sort probs descending
@@ -783,6 +784,7 @@ def load_DE_model(
         else:
             print('Selected device not available: ' + device_name)
             device = torch.device('cpu')
+    # model = SimpleDE(
     model = DualGridMLMMelHarm(
         chord_vocab_size=len(tokenizer.vocab),
         d_model=d_model,

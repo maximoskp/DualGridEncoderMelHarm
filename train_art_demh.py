@@ -18,7 +18,8 @@ def main():
     parser = argparse.ArgumentParser(description='Script for training a GridMLM model with a specific curriculum type.')
 
     # Define arguments
-    parser.add_argument('-f', '--subfolder', type=str, help='Specify subfolder to save the model and results.', required=False)
+    parser.add_argument('-c', '--curriculum', type=str, help='Specify the curriculum type name among: ' + repr(curriculum_types), required=True)
+    parser.add_argument('-f', '--subfolder', type=str, help='Specify subfolder to save the model and results. This name also defines tokenizer and token setup.', required=True)
     parser.add_argument('-d', '--datatrain', type=str, help='Specify the full path to the root folder of the training xml/mxl files', required=True)
     parser.add_argument('-v', '--dataval', type=str, help='Specify the full path to the root folder of the validation xml/mxl files', required=True)
     parser.add_argument('-g', '--gpu', type=int, help='Specify whether and which GPU will be used by used by index. Not using this argument means use CPU.', required=False)
@@ -28,7 +29,7 @@ def main():
     
     # Parse the arguments
     args = parser.parse_args()
-    curriculum_type = 'f2f'
+    curriculum_type = args.curriculum
     exponent = 5
     subfolder = ''
     if args.subfolder:
@@ -48,6 +49,10 @@ def main():
     batchsize = 16
     if args.batchsize:
         batchsize = args.batchsize
+    
+    total_stages = None if curriculum_type == 'f2f' else 10
+    condition_dim = None if 'bar' in subfolder else 16
+    trainable_pos_emb = False if curriculum_type == 'f2f' else True
     
     grid_lenght = int(subfolder.split('_L')[1].split('_')[0])
     tokenizer = CSGridMLMTokenizer(
@@ -133,8 +138,8 @@ def main():
     # loss_fn = torch.nn.CrossEntropyLoss(
     #     weight=class_weights.to(device), ignore_index=-100
     # )
-    model = DualGridMLMMelHarm(
-    # model = SimpleDE(
+    # model = DualGridMLMMelHarm(
+    model = SimpleDE(
         chord_vocab_size=len(tokenizer.vocab),
         d_model=512,
         nhead=8,
@@ -150,21 +155,21 @@ def main():
 
     # save results
     os.makedirs('results/DE/', exist_ok=True)
-    os.makedirs('results/DE/' + subfolder + '/', exist_ok=True)
-    results_path = 'results/DE/' + subfolder + '/' + curriculum_type + '.csv'
+    os.makedirs('results/DE/art_' + subfolder + '/', exist_ok=True)
+    results_path = 'results/DE/art_' + subfolder + '/' + curriculum_type + '.csv'
 
     os.makedirs('saved_models/DE/', exist_ok=True)
-    os.makedirs('saved_models/DE/' + subfolder + '/', exist_ok=True)
-    save_dir = 'saved_models/DE/' + subfolder + '/'
+    os.makedirs('saved_models/DE/art_' + subfolder + '/', exist_ok=True)
+    save_dir = 'saved_models/DE/art_' + subfolder + '/'
     transformer_path = save_dir + curriculum_type + '.pt'
 
     train_with_curriculum(
         model, optimizer, trainloader, valloader, loss_fn, tokenizer.mask_token_id,
         curriculum_type=curriculum_type,
         epochs=epochs,
-        condition_dim=None,
+        condition_dim=condition_dim,
         exponent=exponent,
-        total_stages=None,
+        total_stages=total_stages,
         results_path=results_path,
         transformer_path=transformer_path,
         bar_token_id=tokenizer.bar_token_id
