@@ -1119,14 +1119,14 @@ if __name__ == "__main__":
         output_html="results/results_SE_test.html"
     )
 
-    ground_truth_path = "./MIDIs_jazz/real"          # folder with the ground-truth MIDIs
-    root_folder       = "./MIDIs_jazz/testsuper"   # folder containing setups; each setup has instance folders
+    # ground_truth_path = "./MIDIs_jazz/real"          # folder with the ground-truth MIDIs
+    # root_folder       = "./MIDIs_jazz/testsuper"   # folder containing setups; each setup has instance folders
 
-    compute_and_save_html_results_by_setup(
-        root_folder=root_folder,
-        ground_truth_folder=ground_truth_path,
-        chord_track_index=1,
-        melody_track_index=0,
-        grouping_threshold=0.05,
-        output_html="results/results_SE_jazz.html"
-    )
+    # compute_and_save_html_results_by_setup(
+    #     root_folder=root_folder,
+    #     ground_truth_folder=ground_truth_path,
+    #     chord_track_index=1,
+    #     melody_track_index=0,
+    #     grouping_threshold=0.05,
+    #     output_html="results/results_SE_jazz.html"
+    # )

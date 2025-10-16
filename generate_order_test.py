@@ -64,7 +64,7 @@ def main():
         use_pc_roll='PC' in subfolder,
         use_full_range_melody='FR' in subfolder
     )
-
+    
     val_dir = '/media/maindisk/data/hooktheory_midi_hr/CA_test'
 
     data_files = []
