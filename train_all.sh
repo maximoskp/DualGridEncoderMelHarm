@@ -58,7 +58,14 @@ scripts=(
     # "train_semh4.py -c f2f -f Q4_L80_bar_PC -d /media/maindisk/data/hooktheory_midi_hr/CA_train -v /media/maindisk/data/hooktheory_midi_hr/CA_test -g 1 -e 200 -l 5e-5 -b 8"
 
     # # # DE cross
-    "train_de_cross.py -f Q4_L80_bar_PC -d /media/maindisk/data/hooktheory_midi_hr/CA_train -v /media/maindisk/data/hooktheory_midi_hr/CA_test -g 0 -e 200 -l 5e-5 -b 8"
+    # "train_de_cross.py -f Q4_L80_bar_PC -d /media/maindisk/data/hooktheory_midi_hr/CA_train -v /media/maindisk/data/hooktheory_midi_hr/CA_test -g 0 -e 200 -l 5e-5 -b 8"
+    # "train_de_no_MHself.py -f Q4_L80_bar_PC -d /media/maindisk/data/hooktheory_midi_hr/CA_train -v /media/maindisk/data/hooktheory_midi_hr/CA_test -g 0 -e 200 -l 5e-5 -b 8"
+    # "train_de_no_Mself.py -f Q4_L80_bar_PC -d /media/maindisk/data/hooktheory_midi_hr/CA_train -v /media/maindisk/data/hooktheory_midi_hr/CA_test -g 0 -e 200 -l 5e-5 -b 8"
+
+    # # # DE learned pos and DE/SE vis0
+    "train_demh_lp.py -f Q4_L80_bar_PC -d /media/maindisk/data/hooktheory_midi_hr/CA_train -v /media/maindisk/data/hooktheory_midi_hr/CA_test -g 0 -e 200 -l 5e-5 -b 8"
+    "train_demh_vis0.py -f Q4_L80_bar_PC -d /media/maindisk/data/hooktheory_midi_hr/CA_train -v /media/maindisk/data/hooktheory_midi_hr/CA_test -g 0 -e 200 -l 5e-5 -b 8"
+    "train_semh_vis0.py -c f2f -f Q4_L80_bar_PC -d /media/maindisk/data/hooktheory_midi_hr/CA_train -v /media/maindisk/data/hooktheory_midi_hr/CA_test -g 0 -e 200 -l 5e-5 -b 8"
 )
 
 # Name of the conda environment

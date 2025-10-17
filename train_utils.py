@@ -560,7 +560,10 @@ def train_with_curriculum(
 
                 # Apply masking to harmony
                 if curriculum_type == 'f2f':
-                    percent_visible = min(1.0, (step+1)/total_steps)**exponent  # 5th power goes around half way near zero
+                    if exponent == -1:
+                        percent_visible = 0.0
+                    else:
+                        percent_visible = min(1.0, (step+1)/total_steps)**exponent  # 5th power goes around half way near zero
                     L = harmony_gt.shape[1]
                     num_visible = min( int(L * percent_visible), L-1 )  # ensure at least one token is predicted
                     harmony_input, harmony_target = full_to_partial_masking(
