@@ -73,7 +73,7 @@ def main():
                 data_files.append(full_path)
     print(len(data_files))
 
-    if model_type == 'SE':
+    if 'SE' in model_type:
         model = load_SE_Modular(
             d_model=512, 
             nhead=8,
@@ -86,7 +86,8 @@ def main():
             condition_dim=condition_dim,  # if not None, add a condition token of this dim at start
             unmasking_stages=total_stages,  # if not None, use stage-based unmasking
             trainable_pos_emb=trainable_pos_emb,
-            nvis=nvis
+            nvis=nvis,
+            version=model_type
         )
     else:
         model = load_DE_model(
@@ -100,7 +101,8 @@ def main():
         tokenizer=tokenizer,
         melody_length=grid_lenght,
         harmony_length=grid_lenght,
-        nvis=nvis
+        nvis=nvis,
+        version=model_type
     )
 
     # then create gen
@@ -190,7 +192,7 @@ def main():
             melody_len=grid_lenght,
             save_dir=figs_folder + '/',
             prefix='self_' + model_type,
-            title_info=True
+            title_info=False
         )
     else:
         if has_self_attention:
@@ -198,14 +200,14 @@ def main():
                 total_self_attns,
                 save_dir=figs_folder + '/',
                 prefix='self_' + model_type,
-                title_info=True
+                title_info=False
             )
         if has_cross_attention:
             save_attention_maps(
                 total_cross_attns,
                 save_dir=figs_folder + '/',
                 prefix='cross_' + model_type,
-                title_info=True
+                title_info=False
             )
 
 if __name__ == '__main__':

@@ -41,6 +41,7 @@ def save_attention_maps(
         save_dir="attn_maps", 
         prefix="layer", 
         title_info=False,
+        labels=False,
         save_intermediates=False
     ):
     """
@@ -57,7 +58,6 @@ def save_attention_maps(
         if attn is None:
             print(f"⚠️ No attention stored in layer {i}. Did you run a forward pass?")
             continue
-
         B, H, L, _ = attn.shape
 
         # ---- Per-head plots ----
@@ -111,9 +111,16 @@ def save_attention_maps(
     if title_info:
         sdd, bdd, contextuality = diagonal_dominance_metrics(avg_all, k=3)
         plt.title(f"sdd={sdd:.3f}, bdd={bdd:.3f}, ctx={contextuality:.3f}")
-    plt.xlabel("Key/Value positions")
-    plt.ylabel("Query positions")
+    if labels:
+        plt.xlabel("Key/Value positions")
+        plt.ylabel("Query positions")
     plt.tight_layout()
+    # remove ticks and tick labels on both axes
+    ax = plt.gca()
+    ax.set_xticks([])
+    ax.set_yticks([])
+    ax.set_xticklabels([])
+    ax.set_yticklabels([])
     fname = os.path.join(save_dir, f"{prefix}_AVG_ALL.png")
     plt.savefig(fname)
     plt.close()
@@ -125,6 +132,7 @@ def save_attention_maps_with_split(
         save_dir="attn_maps", 
         prefix="layer", 
         title_info=False,
+        labels=False,
         save_intermediates=False
     ):
     """
@@ -197,8 +205,9 @@ def save_attention_maps_with_split(
         plt.title(f"Self: sdd={sdd_s:.3f}, bdd={bdd_s:.3f}, ctx={contextuality_s:.3f}\n\
                 Cross: sdd={sdd_c:.3f}, bdd={bdd_c:.3f}, ctx={contextuality_c:.3f}")
     # plt.title(f"Attention Map - Average across all layers/heads")
-    plt.xlabel("Key/Value positions", fontsize=18)
-    plt.ylabel("Query positions", fontsize=18)
+    if labels:
+        plt.xlabel("Key/Value positions", fontsize=18)
+        plt.ylabel("Query positions", fontsize=18)
 
     # Set custom tick positions and labels for both axes
     tick_positions = [melody_len // 2, melody_len + melody_len // 2]

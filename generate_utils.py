@@ -5,9 +5,21 @@ from music21 import harmony, stream, metadata, chord, note, key, meter, tempo, d
 import mir_eval
 import numpy as np
 from copy import deepcopy
-from models import DualGridMLMMelHarm, SingleGridMLMelHarm, SEModular, SimpleDE
+from models import DualGridMLMMelHarm, SingleGridMLMelHarm, SEModular, SimpleDE,\
+    DE_only_cross, DE_learned_pos, DE_no_MHself, DE_no_Mself
 import os
 from music_utils import transpose_score
+
+models_dict = {
+    'DE': DualGridMLMMelHarm,
+    'SE': SEModular,
+    'DE_cross': DE_only_cross,
+    'DE_lp': DE_learned_pos,
+    'DE_no_MHself': DE_no_MHself,
+    'DE_no_Mself': DE_no_Mself,
+    'DE_v0': DualGridMLMMelHarm,
+    'SE_v0': SEModular
+}
 
 def remove_conflicting_rests(flat_part):
     """
@@ -774,7 +786,8 @@ def load_DE_model(
     tokenizer=None,
     melody_length=80,
     harmony_length=80,
-    nvis=None
+    nvis=None,
+    version='DE'
 ):
     if device_name == 'cpu':
         device = torch.device('cpu')
@@ -784,8 +797,7 @@ def load_DE_model(
         else:
             print('Selected device not available: ' + device_name)
             device = torch.device('cpu')
-    # model = SimpleDE(
-    model = DualGridMLMMelHarm(
+    model = models_dict[version](
         chord_vocab_size=len(tokenizer.vocab),
         d_model=d_model,
         nhead=nhead,
@@ -796,7 +808,7 @@ def load_DE_model(
         pianoroll_dim=tokenizer.pianoroll_dim,
         device=device,
     )
-    model_path = 'saved_models/DE/' + subfolder + '/' + curriculum_type
+    model_path = 'saved_models/' + version + '/' + subfolder + '/' + curriculum_type
     if nvis is not None:
         model_path += '_nvis' + str(nvis)
     model_path += '.pt'
@@ -862,6 +874,7 @@ def load_SE_Modular(
     condition_dim=None,  # if not None, add a condition token of this dim at start
     unmasking_stages=None,  # if not None, use stage-based unmasking
     trainable_pos_emb=False,
+    version='SE'
 ):
     if device_name == 'cpu':
         device = torch.device('cpu')
@@ -871,7 +884,7 @@ def load_SE_Modular(
         else:
             print('Selected device not available: ' + device_name)
             device = torch.device('cpu')
-    model = SEModular(
+    model = models_dict[version](
         chord_vocab_size=len(tokenizer.vocab),
         d_model=d_model,
         nhead=nhead,
@@ -883,7 +896,7 @@ def load_SE_Modular(
         unmasking_stages=unmasking_stages,  # if not None, use stage-based unmasking
         trainable_pos_emb=trainable_pos_emb
     )
-    model_path = 'saved_models/SE/' + subfolder + '/' + curriculum_type
+    model_path = 'saved_models/' + version + '/' + subfolder + '/' + curriculum_type
     if nvis is not None:
         model_path += '_nvis' + str(nvis)
     model_path += '.pt'

@@ -808,9 +808,9 @@ class DE_no_Mself(nn.Module):
         self_attns = []
         cross_attns = []
         for layer in self.harmony_encoder.layers:
-            self_attns.append(layer.last_cross_attn)
+            self_attns.append(layer.last_self_attn)
             cross_attns.append(layer.last_cross_attn)
-        return cross_attns
+        return self_attns, cross_attns
     # end get_attention_maps
 # end class DE_no_Mself
 

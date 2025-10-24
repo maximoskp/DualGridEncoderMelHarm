@@ -76,7 +76,7 @@ def main():
                 data_files.append(full_path)
     print(len(data_files))
 
-    if model_type == 'SE':
+    if 'SE' in model_type:
         model = load_SE_Modular(
             d_model=512, 
             nhead=8,
@@ -89,7 +89,8 @@ def main():
             condition_dim=condition_dim,  # if not None, add a condition token of this dim at start
             unmasking_stages=total_stages,  # if not None, use stage-based unmasking
             trainable_pos_emb=trainable_pos_emb,
-            nvis=nvis
+            nvis=nvis,
+            version=model_type
         )
     else:
         model = load_DE_model(
@@ -103,7 +104,8 @@ def main():
         tokenizer=tokenizer,
         melody_length=grid_lenght,
         harmony_length=grid_lenght,
-        nvis=nvis
+        nvis=nvis,
+        version=model_type
     )
 
     # then create gen
